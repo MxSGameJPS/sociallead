@@ -24,5 +24,6 @@ yarn-error.log*
 # dados sensíveis / configurações locais
 data/settings.json
 
-# leads coletados internamente
+# leads e consumo local das APIs
 data/leads.json
+data/api-usage.json

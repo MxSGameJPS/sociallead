@@ -2,16 +2,14 @@ import { NextResponse } from "next/server";
 import { validateSearchFilters } from "../../../../lib/security/validation.js";
 import { getRegistryProvider } from "../../../../lib/registries/provider-factory.js";
 import { saveLeads } from "../../../../lib/leads/storage.js";
+import { readUsage } from "../../../../lib/usage/storage.js";
 
 export async function POST(request) {
   let body;
   try {
     body = await request.json();
-  } catch (err) {
-    return NextResponse.json(
-      { error: "Requisição inválida." },
-      { status: 400 }
-    );
+  } catch {
+    return NextResponse.json({ error: "Requisição inválida." }, { status: 400 });
   }
 
   const { valid, errors, filters } = validateSearchFilters(body);
@@ -26,45 +24,53 @@ export async function POST(request) {
 
   try {
     const results = await provider.search(filters);
+    let saved = { added: 0, updated: 0, total: 0 };
 
-    // Persiste os leads encontrados internamente (sem bloquear a resposta em erro).
-    let saved = { added: 0, total: 0 };
     try {
-      saved = await saveLeads(results);
+      saved = await saveLeads(results, "consultacrm");
     } catch {
-      // Falha ao persistir não deve interromper a busca.
+      // A falha local de persistência não invalida a resposta da fonte externa.
     }
+
+    const usage = await readUsage();
 
     return NextResponse.json({
       results,
       isMock: Boolean(provider.isMock),
-      // Conselhos sem integração real ainda não possuem consulta automática.
       pendingIntegration: Boolean(provider.isMock) && results.length === 0,
       total: results.length,
       saved,
+      usage,
       filters
     });
-  } catch (err) {
-    // Mensagens específicas e seguras (sem stack trace).
-    if (err && err.code === "MISSING_QUERY") {
+  } catch (error) {
+    if (error?.code === "MISSING_QUERY") {
       return NextResponse.json(
-        {
-          error:
-            "Informe o nome ou o número do registro para consultar este conselho."
-        },
+        { error: "Informe uma UF, nome, registro ou especialidade." },
         { status: 400 }
       );
     }
-    if (err && err.code === "UNSUPPORTED_COUNCIL") {
+
+    if (error?.code === "CONSULTA_CRM_LIMIT_REACHED") {
       return NextResponse.json(
         {
-          error:
-            "Este conselho ainda não possui integração automática de consulta.",
+          error: "A cota mensal de 100 consultas da API ConsultaCRM foi atingida.",
+          code: error.code
+        },
+        { status: 429 }
+      );
+    }
+
+    if (error?.code === "UNSUPPORTED_COUNCIL") {
+      return NextResponse.json(
+        {
+          error: "Este conselho ainda não possui integração automática de consulta.",
           pendingIntegration: true
         },
         { status: 200 }
       );
     }
+
     return NextResponse.json(
       { error: "Não foi possível consultar este conselho agora." },
       { status: 502 }
