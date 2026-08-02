@@ -1,0 +1,127 @@
+.card {
+  background: #fff;
+  border: 1px solid var(--gray-border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.selected {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px var(--blue-light);
+}
+
+.head {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.checkboxWrap input {
+  width: 16px;
+  height: 16px;
+  margin-top: 3px;
+}
+
+.headInfo {
+  flex: 1;
+}
+
+.name {
+  font-size: 15px;
+  margin: 0 0 6px;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.badge {
+  background: var(--navy);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.reg {
+  font-size: 12px;
+  color: var(--gray-text);
+}
+
+.statusActive,
+.statusInactive,
+.statusUnknown {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.statusActive {
+  background: var(--green-bg);
+  color: var(--green);
+}
+
+.statusInactive {
+  background: var(--red-bg);
+  color: var(--red);
+}
+
+.statusUnknown {
+  background: var(--yellow-bg);
+  color: var(--yellow);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+}
+
+.rowLabel {
+  color: var(--gray-text);
+  min-width: 92px;
+  font-size: 12px;
+}
+
+.group {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--gray-border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.socials {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.social {
+  font-size: 12px;
+  background: var(--blue-light);
+  color: var(--blue);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+a.social:hover {
+  text-decoration: none;
+  background: #d6e5fa;
+}

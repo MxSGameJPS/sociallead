@@ -1,0 +1,30 @@
+.content {
+  padding: 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.info {
+  color: var(--gray-text);
+  font-size: 14px;
+}
+
+.error {
+  background: var(--red-bg);
+  color: var(--red);
+  border: 1px solid #f5c2c7;
+  border-radius: 6px;
+  padding: 12px 14px;
+  font-size: 14px;
+}
+
+.notice {
+  background: var(--yellow-bg);
+  color: var(--yellow);
+  border: 1px solid #f0e0a8;
+  border-radius: 6px;
+  padding: 12px 14px;
+  font-size: 14px;
+  line-height: 1.5;
+}

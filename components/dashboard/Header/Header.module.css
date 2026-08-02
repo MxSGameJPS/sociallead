@@ -1,0 +1,19 @@
+.header {
+  background: #fff;
+  border-bottom: 1px solid var(--gray-border);
+  padding: 18px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.title {
+  font-size: 20px;
+  color: var(--navy);
+}
+
+.subtitle {
+  margin: 4px 0 0;
+  color: var(--gray-text);
+  font-size: 13px;
+}
