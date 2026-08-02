@@ -3,6 +3,7 @@ import {
   supportsInfosimples,
   validateWithInfosimples
 } from "../../../../lib/registries/infosimples-provider.js";
+import { saveLeads } from "../../../../lib/leads/storage.js";
 
 export async function POST(request) {
   let body;
@@ -28,7 +29,15 @@ export async function POST(request) {
       name: body.name || ""
     });
 
-    return NextResponse.json(result);
+    let saved = { added: 0, updated: 0, total: 0 };
+    if (result.records.length > 0) {
+      saved = await saveLeads(result.records, "infosimples");
+    }
+
+    return NextResponse.json({
+      ...result,
+      saved
+    });
   } catch (error) {
     const status = [
       "MISSING_QUERY",
@@ -41,7 +50,8 @@ export async function POST(request) {
     return NextResponse.json(
       {
         error: error?.message || "Não foi possível validar o registro.",
-        code: error?.code || "VALIDATION_ERROR"
+        code: error?.code || "VALIDATION_ERROR",
+        billing: error?.billing || undefined
       },
       { status }
     );
