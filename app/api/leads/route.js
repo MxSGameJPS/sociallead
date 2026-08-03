@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readLeads } from "../../../lib/leads/storage.js";
+import { readLeads, saveLeads } from "../../../lib/leads/storage.js";
 
 export async function GET(request) {
   try {
@@ -25,5 +25,36 @@ export async function GET(request) {
     return NextResponse.json({ leads: filtered, total: filtered.length });
   } catch {
     return NextResponse.json({ error: "Não foi possível carregar os leads salvos." }, { status: 500 });
+  }
+}
+
+export async function POST(request) {
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Requisição inválida." }, { status: 400 });
+  }
+
+  const leads = Array.isArray(body?.leads) ? body.leads : [];
+  if (!leads.length) {
+    return NextResponse.json({ error: "Selecione ao menos um lead para adicionar ao CRM." }, { status: 400 });
+  }
+
+  if (leads.length > 5000) {
+    return NextResponse.json({ error: "O limite por operação é de 5.000 leads." }, { status: 400 });
+  }
+
+  try {
+    const source = String(body?.source || "manual-selection").trim() || "manual-selection";
+    const saved = await saveLeads(leads, source);
+    return NextResponse.json({
+      success: true,
+      added: saved.added,
+      updated: saved.updated,
+      total: saved.total
+    });
+  } catch {
+    return NextResponse.json({ error: "Não foi possível adicionar os leads selecionados ao CRM." }, { status: 500 });
   }
 }
