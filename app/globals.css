@@ -2,10 +2,14 @@
   --navy: #0f2c4c;
   --navy-dark: #0a2038;
   --blue: #1f6fd6;
+  --blue-dark: #185bb0;
   --blue-light: #e8f0fb;
+  --primary: var(--blue);
+  --primary-hover: var(--blue-dark);
   --white: #ffffff;
   --gray-bg: #f4f6f9;
   --gray-border: #dfe4ea;
+  --border: var(--gray-border);
   --gray-text: #5a6675;
   --text: #1c2531;
   --green: #1e9e5a;
@@ -48,7 +52,8 @@ button {
 }
 
 input,
-select {
+select,
+textarea {
   font-family: var(--font);
   font-size: 14px;
 }
