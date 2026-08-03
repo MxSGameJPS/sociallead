@@ -48,7 +48,7 @@ export default function CRMBoard({ initialLeads = [] }) {
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [search, setSearch] = useState("");
   const [nicheFilter, setNicheFilter] = useState("all");
-  const [gradeFilter, setGradeFilter] = useState("all");
+  const [verificationFilter, setVerificationFilter] = useState("all");
   const [quick, setQuick] = useState("all");
   const [sort, setSort] = useState("recent");
   const [dragOver, setDragOver] = useState("");
@@ -88,14 +88,11 @@ export default function CRMBoard({ initialLeads = [] }) {
         if (!haystack.includes(query)) return false;
       }
       if (nicheFilter !== "all" && normalizeFilterValue(lead.segment || lead.profession) !== nicheFilter) return false;
-      if (gradeFilter !== "all" && lead.grade !== gradeFilter) return false;
+      if (verificationFilter !== "all" && tag !== verificationFilter) return false;
       if (quick === "no-site" && lead.site && !lead.weakSite) return false;
       if (quick === "score" && Number(lead.score || 0) < 50) return false;
       if (quick === "phone" && !lead.phone && !lead.whatsapp) return false;
       if (quick === "whatsapp" && !lead.whatsapp && !isPossibleMobile(lead.phone)) return false;
-      if (quick === "validated" && tag !== "VALIDADO") return false;
-      if (quick === "pending" && tag !== "AGUARDANDO ANÁLISE") return false;
-      if (quick === "manual" && !["FALTA REGISTRO", "FALTA EMAIL", "NÃO VALIDADO"].includes(tag)) return false;
       return true;
     });
     return filtered.sort((a, b) => {
@@ -103,7 +100,7 @@ export default function CRMBoard({ initialLeads = [] }) {
       if (sort === "name") return String(a.name).localeCompare(String(b.name), "pt-BR");
       return new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0);
     });
-  }, [leads, nicheFilter, gradeFilter, quick, search, sort]);
+  }, [leads, nicheFilter, verificationFilter, quick, search, sort]);
 
   const byStage = useMemo(() => {
     const grouped = Object.fromEntries(STAGE_IDS.map(id => [id, []]));
@@ -113,10 +110,10 @@ export default function CRMBoard({ initialLeads = [] }) {
 
   const selectedCount = selectedIds.size;
   const allVisibleSelected = visible.length > 0 && visible.every(lead => selectedIds.has(lead.id));
-  const activeFilterCount = [Boolean(search.trim()), nicheFilter !== "all", gradeFilter !== "all", quick !== "all"].filter(Boolean).length;
+  const activeFilterCount = [Boolean(search.trim()), nicheFilter !== "all", verificationFilter !== "all", quick !== "all"].filter(Boolean).length;
 
   function showNotice(message, kind = "error") { setNoticeKind(kind); setNotice(message); }
-  function clearFilters() { setSearch(""); setNicheFilter("all"); setGradeFilter("all"); setQuick("all"); }
+  function clearFilters() { setSearch(""); setNicheFilter("all"); setVerificationFilter("all"); setQuick("all"); }
   function toggleLeadSelection(id) {
     setSelectedIds(current => { const next = new Set(current); next.has(id) ? next.delete(id) : next.add(id); return next; });
   }
@@ -181,8 +178,8 @@ export default function CRMBoard({ initialLeads = [] }) {
       <input className={s.search} value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar por nome, profissão, cidade, registro, e-mail ou tag..." />
       <div className={s.filterBar} aria-label="Filtros combináveis do CRM">
         <label className={s.filterField}><span>Profissão</span><select value={nicheFilter} onChange={event => setNicheFilter(event.target.value)}><option value="all">Todas as profissões</option>{nicheOptions.map(option => <option key={option.value} value={option.value}>{option.label} ({option.count})</option>)}</select></label>
-        <label className={s.filterField}><span>Nota comercial</span><select value={gradeFilter} onChange={event => setGradeFilter(event.target.value)}><option value="all">Todas as notas</option><option value="A">Nota A · Quente</option><option value="B">Nota B · Morno</option><option value="C">Nota C · Potencial</option><option value="D">Nota D · Frio</option></select></label>
-        <label className={s.filterField}><span>Oportunidade / validação</span><select value={quick} onChange={event => setQuick(event.target.value)}><option value="all">Todas</option><option value="validated">Validados</option><option value="pending">Aguardando análise</option><option value="manual">Exigem busca manual</option><option value="no-site">Sem site próprio</option><option value="score">Score 50+</option><option value="phone">Com telefone</option><option value="whatsapp">WhatsApp testável</option></select></label>
+        <label className={s.filterField}><span>Status de verificação</span><select value={verificationFilter} onChange={event => setVerificationFilter(event.target.value)}><option value="all">Todos os status</option><option value="VALIDADO">Verificado</option><option value="NÃO VALIDADO">Não verificado</option><option value="FALTA REGISTRO">Falta registro</option><option value="FALTA EMAIL">Falta e-mail</option><option value="AGUARDANDO ANÁLISE">Aguardando análise</option></select></label>
+        <label className={s.filterField}><span>Oportunidade</span><select value={quick} onChange={event => setQuick(event.target.value)}><option value="all">Todas</option><option value="no-site">Sem site próprio</option><option value="score">Score 50+</option><option value="phone">Com telefone</option><option value="whatsapp">WhatsApp testável</option></select></label>
         {activeFilterCount > 0 && <button className={s.clearFilters} type="button" onClick={clearFilters}>Limpar filtros ({activeFilterCount})</button>}
       </div>
 
