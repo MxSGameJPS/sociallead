@@ -5,8 +5,8 @@ import { readLeads } from "../../../../lib/leads/storage.js";
 
 const SETTINGS_FILE = path.join(process.cwd(), "data", "settings.json");
 const LEADS_FILE = path.join(process.cwd(), "data", "leads.json");
-const MAX_HTML_LENGTH = 160000;
-const MAX_TEXT_PER_SOURCE = 42000;
+const MAX_HTML_LENGTH = 180000;
+const MAX_TEXT_PER_SOURCE = 50000;
 const MAX_EXTRA_LINKS = 8;
 const MIN_USEFUL_TEXT = 180;
 
@@ -29,7 +29,7 @@ export async function POST(request) {
   const lead = leads[index];
   const sourceUrls = normalizeLinks([lead.website, ...(lead.analysisLinks || []), ...extraLinks]);
   if (!sourceUrls.length) {
-    return NextResponse.json({ error: "Informe ao menos um site ou link público para análise." }, { status: 400 });
+    return NextResponse.json({ error: "Informe ao menos um site ou link público válido para análise." }, { status: 400 });
   }
 
   let settings;
@@ -41,7 +41,7 @@ export async function POST(request) {
 
   const apiKey = settings.apiKey || settings.key || settings.token || "";
   const baseUrl = String(settings.baseUrl || settings.url || "http://localhost:20128/v1").replace(/\/$/, "");
-  const temperature = Number(settings.temperature ?? 0.3);
+  const temperature = Number(settings.temperature ?? 0.2);
   let model = String(settings.model || "").trim();
 
   if (!apiKey || !baseUrl) {
@@ -52,56 +52,28 @@ export async function POST(request) {
     try {
       model = await resolveFirstModel(baseUrl, apiKey);
     } catch (error) {
-      return NextResponse.json({ error: `A conexão está configurada, mas nenhum modelo foi informado e não foi possível detectá-lo automaticamente: ${error.message}` }, { status: 400 });
+      return NextResponse.json({ error: `Nenhum modelo foi informado e a detecção automática falhou: ${error.message}` }, { status: 400 });
     }
   }
 
   const sources = [];
   const failures = [];
-  const deterministic = {
-    emails: [],
-    phones: [],
-    whatsapp: [],
-    registrations: [],
-    socialLinks: [],
-    services: [],
-    specialties: []
-  };
+  const deterministic = emptyFindings();
+  const attempted = new Set();
 
   for (const url of sourceUrls) {
-    try {
-      const result = await fetchPublicSource(url);
-      mergeFindings(deterministic, result);
-
-      if (result.text.length < MIN_USEFUL_TEXT || isBlockedSocialPage(url, result.text)) {
-        failures.push({ url, error: "conteúdo bloqueado, genérico ou insuficiente para análise" });
-        continue;
-      }
-      sources.push({ url, text: result.text.slice(0, MAX_TEXT_PER_SOURCE) });
-    } catch (error) {
-      failures.push({ url, error: error.message });
-    }
+    await collectSource(url, sources, failures, deterministic, attempted);
   }
 
   if (lead.website) {
-    const internalUrls = buildLikelyInternalPages(lead.website);
-    for (const url of internalUrls) {
-      if (sourceUrls.includes(url)) continue;
-      try {
-        const result = await fetchPublicSource(url);
-        mergeFindings(deterministic, result);
-        if (result.text.length >= MIN_USEFUL_TEXT) {
-          sources.push({ url, text: result.text.slice(0, MAX_TEXT_PER_SOURCE) });
-        }
-      } catch {
-        // páginas internas são tentativas auxiliares
-      }
+    for (const url of buildLikelyInternalPages(lead.website)) {
+      await collectSource(url, sources, failures, deterministic, attempted, true);
     }
   }
 
   if (!sources.length && !hasDeterministicData(deterministic)) {
     return NextResponse.json({
-      error: "Os links foram recebidos, mas nenhum conteúdo útil pôde ser lido. Instagram e Facebook frequentemente bloqueiam acesso automatizado.",
+      error: "Nenhum conteúdo útil pôde ser lido nos links informados.",
       details: failures
     }, { status: 502 });
   }
@@ -115,24 +87,27 @@ export async function POST(request) {
   }
 
   const rawContent = getAssistantContent(aiPayload);
-  const parsedDossier = parseDossier(rawContent);
-  if (!parsedDossier) {
+  const parsed = parseDossier(rawContent);
+  const dossier = normalizeDossier(parsed || {}, deterministic, lead);
+  const semanticScore = getSemanticScore(dossier);
+  const hasUsefulDeterministicData = hasDeterministicData(deterministic);
+
+  if (!parsed && !hasUsefulDeterministicData) {
     return NextResponse.json({
-      error: "A IA respondeu, mas não retornou um JSON de dossiê válido.",
-      hint: "A resposta real foi incluída em details para diagnóstico.",
-      details: stringifyForDebug(rawContent).slice(0, 3000)
+      error: "A IA não retornou um dossiê válido.",
+      details: stringifyForDebug(rawContent).slice(0, 4000)
     }, { status: 502 });
   }
 
-  const dossier = normalizeDossier(parsedDossier, deterministic, lead);
   const now = new Date().toISOString();
-  const registration = clean(dossier.registration) || firstValue(deterministic.registrations) || lead.registration || "";
-  const leadName = clean(dossier.leadName) || firstValue(dossier.professionalNames) || lead.name || lead.businessName || "";
+  const registration = chooseRegistration(dossier.registration, deterministic.registrations, lead.registration);
+  const leadName = chooseLeadName(dossier, lead);
   const email = chooseBestEmail(dossier.primaryEmail, dossier.emails, deterministic.emails, lead.email);
-  const whatsapp = clean(dossier.primaryWhatsapp) || clean(dossier.whatsapp) || firstValue(deterministic.whatsapp) || lead.whatsapp || "";
-  const phone = clean(dossier.primaryPhone) || firstValue(dossier.phones) || chooseBestPhone(deterministic.phones, lead.phone) || "";
+  const whatsapp = chooseBestWhatsapp(dossier.primaryWhatsapp, dossier.whatsapp, deterministic.whatsapp, lead.whatsapp);
+  const phone = chooseBestPhone(dossier.primaryPhone, dossier.phones, deterministic.phones, lead.phone, whatsapp);
   const city = clean(dossier.city) || lead.city || "";
-  const state = clean(dossier.state).toUpperCase() || lead.state || "";
+  const state = normalizeState(dossier.state) || lead.state || "";
+  const dossierStatus = semanticScore >= 2 ? "COMPLETED" : "PARTIAL";
 
   const updatedLead = {
     ...lead,
@@ -144,11 +119,11 @@ export async function POST(request) {
     phone,
     city,
     state,
-    instagram: clean(dossier.instagram) || findSocial(deterministic.socialLinks, "instagram.com") || lead.instagram || "",
-    facebook: clean(dossier.facebook) || findSocial(deterministic.socialLinks, "facebook.com") || lead.facebook || "",
-    linkedin: clean(dossier.linkedin) || findSocial(deterministic.socialLinks, "linkedin.com") || lead.linkedin || "",
+    instagram: chooseSocial(dossier.instagram, deterministic.socialLinks, "instagram.com", lead.instagram),
+    facebook: chooseSocial(dossier.facebook, deterministic.socialLinks, "facebook.com", lead.facebook),
+    linkedin: chooseSocial(dossier.linkedin, deterministic.socialLinks, "linkedin.com", lead.linkedin),
     analysisLinks: sourceUrls,
-    dossierStatus: "COMPLETED",
+    dossierStatus,
     registryStatus: registration ? "FOUND_ON_WEBSITE" : "NOT_FOUND",
     contactCompleteness: calculateCompleteness({ name: leadName, email, whatsapp, city, state }),
     dossier: {
@@ -157,6 +132,8 @@ export async function POST(request) {
       deterministicFindings: deterministic,
       analyzedSources: unique(sources.map((source) => source.url)),
       inaccessibleSources: failures,
+      semanticScore,
+      rawAiPreview: stringifyForDebug(rawContent).slice(0, 2500),
       generatedAt: now,
       modelUsed: model
     },
@@ -169,14 +146,42 @@ export async function POST(request) {
   return NextResponse.json({ lead: updatedLead, dossier: updatedLead.dossier });
 }
 
-function mergeFindings(deterministic, result) {
-  mergeUnique(deterministic.emails, extractEmails(result.raw));
-  mergeUnique(deterministic.phones, extractPhones(result.raw));
-  mergeUnique(deterministic.whatsapp, extractWhatsapp(result.raw));
-  mergeUnique(deterministic.registrations, extractRegistrations(result.raw));
-  mergeUnique(deterministic.socialLinks, extractSocialLinks(result.raw));
-  mergeUnique(deterministic.services, extractServices(result.raw, result.text));
-  mergeUnique(deterministic.specialties, extractSpecialties(result.text));
+function emptyFindings() {
+  return {
+    emails: [],
+    phones: [],
+    whatsapp: [],
+    registrations: [],
+    socialLinks: [],
+    services: [],
+    specialties: []
+  };
+}
+
+async function collectSource(url, sources, failures, deterministic, attempted, optional = false) {
+  if (!url || attempted.has(url)) return;
+  attempted.add(url);
+  try {
+    const result = await fetchPublicSource(url);
+    mergeFindings(deterministic, result);
+    if (result.text.length < MIN_USEFUL_TEXT || isBlockedSocialPage(url, result.text)) {
+      if (!optional) failures.push({ url, error: "conteúdo bloqueado, genérico ou insuficiente" });
+      return;
+    }
+    sources.push({ url, text: result.text.slice(0, MAX_TEXT_PER_SOURCE) });
+  } catch (error) {
+    if (!optional) failures.push({ url, error: error.message });
+  }
+}
+
+function mergeFindings(target, result) {
+  mergeUnique(target.emails, extractEmails(result.raw, result.text));
+  mergeUnique(target.phones, extractPhones(result.raw, result.text));
+  mergeUnique(target.whatsapp, extractWhatsapp(result.raw));
+  mergeUnique(target.registrations, extractRegistrations(result.text));
+  mergeUnique(target.socialLinks, extractSocialLinks(result.raw));
+  mergeUnique(target.services, extractServices(result.raw, result.text));
+  mergeUnique(target.specialties, extractSpecialties(result.text));
 }
 
 async function fetchPublicSource(url) {
@@ -198,20 +203,18 @@ async function fetchPublicSource(url) {
 async function requestDossier({ baseUrl, apiKey, model, temperature, prompt }) {
   const commonBody = {
     model,
-    temperature: Number.isFinite(temperature) ? temperature : 0.3,
+    temperature: Number.isFinite(temperature) ? temperature : 0.2,
     messages: [
       {
         role: "system",
-        content: "Você é um analista de inteligência comercial. Leia todo o conteúdo fornecido, especialmente títulos, serviços, áreas de atuação e contatos. Responda exclusivamente com um objeto JSON válido, sem markdown ou texto adicional. Não invente informações."
+        content: "Você é um analista de inteligência comercial. Extraia dados somente das fontes fornecidas. Responda apenas com JSON válido, sem markdown. Não invente informações."
       },
       { role: "user", content: prompt }
     ]
   };
 
   let response = await callChat(baseUrl, apiKey, { ...commonBody, response_format: { type: "json_object" } });
-  if (!response.ok && [400, 404, 422].includes(response.status)) {
-    response = await callChat(baseUrl, apiKey, commonBody);
-  }
+  if (!response.ok && [400, 404, 422].includes(response.status)) response = await callChat(baseUrl, apiKey, commonBody);
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload?.error?.message || `IA respondeu com status ${response.status}.`);
   return payload;
@@ -230,23 +233,13 @@ function callChat(baseUrl, apiKey, body) {
 function getAssistantContent(payload) {
   const message = payload?.choices?.[0]?.message;
   if (message?.parsed && typeof message.parsed === "object") return message.parsed;
+  if (message?.tool_calls?.[0]?.function?.arguments) return message.tool_calls[0].function.arguments;
   if (Array.isArray(message?.content)) {
     return message.content.map((part) => part?.text || part?.content || "").filter(Boolean).join("\n");
   }
-  if (message?.content) return message.content;
-  if (message?.tool_calls?.[0]?.function?.arguments) return message.tool_calls[0].function.arguments;
+  if (message?.content !== undefined) return message.content;
   if (message?.reasoning_content) return message.reasoning_content;
-
-  const alternatives = [
-    payload?.output_text,
-    payload?.response,
-    payload?.result,
-    payload?.data?.content,
-    payload?.data?.output,
-    payload?.data?.response,
-    payload?.output?.[0]?.content?.[0]?.text
-  ];
-  return alternatives.find((value) => value !== undefined && value !== null && value !== "") || "";
+  return payload?.output_text || payload?.response || payload?.result || payload?.data?.content || payload?.data?.output || "";
 }
 
 function parseDossier(value) {
@@ -254,7 +247,6 @@ function parseDossier(value) {
     const unwrapped = unwrapDossier(value);
     return isDossierLike(unwrapped) ? unwrapped : null;
   }
-
   const text = stripCodeFence(String(value || ""));
   if (!text) return null;
   for (const candidate of [text, extractFirstJsonObject(text)].filter(Boolean)) {
@@ -279,35 +271,26 @@ function unwrapDossier(value) {
 
 function isDossierLike(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const keys = [
-    "leadName", "primaryEmail", "primaryWhatsapp", "summary", "professionalNames",
-    "services", "specialties", "emails", "phones", "registration", "opportunities"
-  ];
-  return keys.some((key) => Object.prototype.hasOwnProperty.call(value, key));
+  return ["leadName", "summary", "services", "specialties", "emails", "phones", "registration", "opportunities", "professionalNames"]
+    .some((key) => Object.prototype.hasOwnProperty.call(value, key));
 }
 
 function normalizeDossier(value, deterministic, lead) {
   const dossier = value && typeof value === "object" ? value : {};
-  const services = unique([
-    ...toStringArray(dossier.services),
-    ...toStringArray(deterministic.services),
-    ...toStringArray(lead.dossier?.services)
-  ]);
-  const specialties = unique([
-    ...toStringArray(dossier.specialties),
-    ...toStringArray(deterministic.specialties),
-    ...toStringArray(lead.dossier?.specialties)
-  ]);
+  const services = unique([...toStringArray(dossier.services), ...deterministic.services, ...toStringArray(lead.dossier?.services)]);
+  const specialties = unique([...toStringArray(dossier.specialties), ...deterministic.specialties, ...toStringArray(lead.dossier?.specialties)]);
+  const emails = unique([...toStringArray(dossier.emails), ...deterministic.emails]).filter(isValidEmail);
+  const phones = unique([...toStringArray(dossier.phones), ...deterministic.phones]).filter(isPlausibleBrazilianPhone);
 
   return {
     ...dossier,
     leadName: clean(dossier.leadName),
-    primaryEmail: clean(dossier.primaryEmail),
-    primaryWhatsapp: clean(dossier.primaryWhatsapp),
-    primaryPhone: clean(dossier.primaryPhone),
+    primaryEmail: isValidEmail(dossier.primaryEmail) ? clean(dossier.primaryEmail) : "",
+    primaryWhatsapp: isPlausibleBrazilianPhone(dossier.primaryWhatsapp) ? cleanPhone(dossier.primaryWhatsapp) : "",
+    primaryPhone: isPlausibleBrazilianPhone(dossier.primaryPhone) ? cleanPhone(dossier.primaryPhone) : "",
     professionalNames: toStringArray(dossier.professionalNames),
-    emails: unique([...toStringArray(dossier.emails), ...deterministic.emails]),
-    phones: unique([...toStringArray(dossier.phones), ...deterministic.phones]),
+    emails,
+    phones,
     teamMembers: toStringArray(dossier.teamMembers),
     opportunities: toStringArray(dossier.opportunities),
     warnings: toStringArray(dossier.warnings),
@@ -316,6 +299,227 @@ function normalizeDossier(value, deterministic, lead) {
     summary: clean(dossier.summary) || buildFallbackSummary(lead, services, specialties),
     confidence: normalizeConfidence(dossier.confidence)
   };
+}
+
+function getSemanticScore(dossier) {
+  let score = 0;
+  if (clean(dossier.summary)) score += 1;
+  if (toStringArray(dossier.services).length) score += 1;
+  if (toStringArray(dossier.specialties).length) score += 1;
+  if (toStringArray(dossier.professionalNames).length || toStringArray(dossier.teamMembers).length) score += 1;
+  if (toStringArray(dossier.opportunities).length) score += 1;
+  return score;
+}
+
+async function resolveFirstModel(baseUrl, apiKey) {
+  const response = await fetch(`${baseUrl}/models`, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(20000),
+    headers: { Authorization: `Bearer ${apiKey}` }
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.error?.message || `endpoint /models respondeu com status ${response.status}`);
+  const model = payload?.data?.find((item) => item?.id)?.id || payload?.models?.find((item) => item?.id)?.id || "";
+  if (!model) throw new Error("nenhum modelo foi retornado pelo endpoint /models");
+  return model;
+}
+
+function buildPrompt(lead, sources, failures, deterministic) {
+  const sourceText = sources.map((source, index) => `\nFONTE ${index + 1}: ${source.url}\n${source.text}`).join("\n");
+  return `Crie um dossiê comercial completo usando somente os dados fornecidos.
+
+OBRIGATÓRIO:
+- listar todos os serviços, soluções e áreas de atuação encontrados em títulos, cards, menus e textos;
+- identificar contatos reais, ignorando arquivos, placeholders, IDs e números de scripts;
+- identificar profissional responsável, equipe e registro profissional somente quando houver evidência;
+- apontar oportunidades comerciais reais.
+
+DADOS JÁ CONHECIDOS:
+${JSON.stringify({ name: lead.name, businessName: lead.businessName, website: lead.website, phone: lead.phone, city: lead.city, state: lead.state, probableCouncil: lead.council, niche: lead.specialty })}
+
+DADOS EXTRAÍDOS DO HTML:
+${JSON.stringify(deterministic)}
+
+FONTES LIDAS:
+${sourceText}
+
+FONTES INACESSÍVEIS:
+${JSON.stringify(failures)}
+
+Retorne apenas:
+{"leadName":"","primaryEmail":"","primaryWhatsapp":"","primaryPhone":"","city":"","state":"","summary":"","professionalNames":[],"council":"","registration":"","registrationEvidence":"","specialties":[],"services":[],"emails":[],"phones":[],"whatsapp":"","instagram":"","facebook":"","linkedin":"","teamMembers":[],"companyName":"","cnpj":"","opportunities":[],"warnings":[],"confidence":0}`;
+}
+
+function buildLikelyInternalPages(website) {
+  try {
+    const base = new URL(website);
+    return ["servicos", "solucoes", "areas-de-atuacao", "projetos", "contato", "fale-conosco", "sobre", "quem-somos", "equipe", "profissionais"]
+      .map((slug) => new URL(`/${slug}`, base.origin).toString());
+  } catch {
+    return [];
+  }
+}
+
+function extractEmails(raw, visibleText) {
+  const hrefEmails = [...String(raw).matchAll(/mailto:([^?"'<>\s]+)/gi)].map((match) => decodeURIComponent(match[1]));
+  const textEmails = String(visibleText || "").match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [];
+  return unique([...hrefEmails, ...textEmails].map((email) => email.toLowerCase()).filter(isValidEmail));
+}
+
+function isValidEmail(value) {
+  const email = clean(value).toLowerCase();
+  if (!/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i.test(email)) return false;
+  if (/\.(?:jpg|jpeg|png|webp|gif|svg|css|js|woff2?|ttf|ico|pdf)$/i.test(email)) return false;
+  if (/^(?:seu|teste|exemplo|email|nome)@/i.test(email)) return false;
+  if (/@(?:example|teste|exemplo)\./i.test(email)) return false;
+  return true;
+}
+
+function extractPhones(raw, visibleText) {
+  const hrefPhones = [...String(raw).matchAll(/href=["']tel:([^"']+)/gi)].map((match) => cleanPhone(match[1]));
+  const formatted = String(visibleText || "").match(/(?:\+?55\s*)?\(?\d{2}\)?\s*(?:9\s*)?\d{4}[-.\s]\d{4}/g) || [];
+  return unique([...hrefPhones, ...formatted.map(cleanPhone)].filter(isPlausibleBrazilianPhone));
+}
+
+function extractWhatsapp(raw) {
+  const matches = [...String(raw).matchAll(/(?:wa\.me\/|api\.whatsapp\.com\/send\?(?:[^"'<>\s]*&)?phone=)(\+?\d{10,13})/gi)]
+    .map((match) => cleanPhone(match[1]));
+  return unique(matches.filter(isPlausibleBrazilianPhone));
+}
+
+function extractRegistrations(text) {
+  return unique((String(text).match(/\b(?:OAB|CRM|CRO|CREA|CRP|CRC|CRN|CRF|COREN|CREFITO|CAU)[\s:/.-]*(?:[A-Z]{2}[\s:/.-]*)?\d{3,10}(?:[-/]\d+)?\b/gi) || [])
+    .map((value) => value.replace(/\s+/g, " ").trim()));
+}
+
+function extractSocialLinks(raw) {
+  const candidates = String(raw).match(/https?:\\?\/\\?\/(?:www\.)?(?:instagram|facebook|linkedin)\.com[^"'<>\s\\]*/gi) || [];
+  return unique(candidates.map((value) => value.replace(/\\/g, "")).filter(isValidSocialUrl));
+}
+
+function isValidSocialUrl(value) {
+  try {
+    const url = new URL(value);
+    if (!/instagram\.com|facebook\.com|linkedin\.com/i.test(url.hostname)) return false;
+    if (!url.pathname || url.pathname === "/") return false;
+    if (/\.\.\.|\/brand\/|\/login|\/share|\/dialog|\/plugins|instagram\.com\/whatsapp/i.test(url.href)) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function extractServices(raw, text) {
+  const html = String(raw || "").replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ");
+  const candidates = [];
+  const tags = /<(?:h1|h2|h3|h4|h5|h6|strong|b|article|figcaption)[^>]*>([\s\S]*?)<\/(?:h1|h2|h3|h4|h5|h6|strong|b|article|figcaption)>/gi;
+  for (const match of html.matchAll(tags)) {
+    const label = cleanLabel(htmlToText(match[1]));
+    if (isServiceLabel(label)) candidates.push(label);
+  }
+  const patterns = [
+    /consultoria(?: especializada)?/gi,
+    /laudos? t[eé]cnicos?/gi,
+    /estudos? de qualidade de energia/gi,
+    /projetos? el[eé]tricos?(?: industriais?| comerciais?)?/gi,
+    /execu[cç][aã]o de sistemas? el[eé]tricos?/gi,
+    /prote[cç][aã]o contra descargas atmosf[eé]ricas/gi,
+    /\bSPDA\b/g,
+    /manuten[cç][aã]o de m[eé]dia tens[aã]o/gi,
+    /cabines? prim[aá]rias?/gi,
+    /redes? de m[eé]dia tens[aã]o/gi,
+    /energia solar fotovoltaica/gi,
+    /efici[eê]ncia energ[eé]tica/gi,
+    /projetos?/gi,
+    /execu[cç][aã]o de obras?/gi,
+    /dire[cç][aã]o t[eé]cnica de obras?/gi,
+    /licen[cç]as? do corpo de bombeiros?/gi,
+    /legaliza[cç][aã]o de obras?/gi,
+    /laudo(?:s)? para reforma/gi
+  ];
+  for (const pattern of patterns) for (const match of String(text || "").matchAll(pattern)) candidates.push(cleanLabel(match[0]));
+  return unique(candidates).slice(0, 50);
+}
+
+function extractSpecialties(text) {
+  const patterns = [
+    /engenharia civil/gi,
+    /engenharia estrutural/gi,
+    /engenharia el[eé]trica/gi,
+    /energia solar(?: fotovoltaica)?/gi,
+    /sistemas? el[eé]tricos? industriais?/gi,
+    /qualidade de energia/gi,
+    /efici[eê]ncia energ[eé]tica/gi,
+    /seguran[cç]a contra inc[eê]ndio/gi,
+    /arquitetura/gi
+  ];
+  return unique(patterns.flatMap((pattern) => [...String(text || "").matchAll(pattern)].map((match) => cleanLabel(match[0]))));
+}
+
+function isServiceLabel(value) {
+  if (!value || value.length < 3 || value.length > 100) return false;
+  if (/^(servi[cç]os?|saiba mais|or[cç]amento|contato|in[ií]cio|home|menu)$/i.test(value)) return false;
+  return /projeto|obra|engenharia|energia|sistema|dire[cç][aã]o|licen[cç]a|legaliza|laudo|consultoria|manuten[cç][aã]o|execu[cç][aã]o|efici[eê]ncia|cabine|rede|SPDA/i.test(value);
+}
+
+function chooseBestEmail(primary, aiEmails, deterministicEmails, previous) {
+  const candidates = unique([clean(primary), ...toStringArray(aiEmails), ...deterministicEmails, clean(previous)]).filter(isValidEmail);
+  return candidates.find((email) => !/^(?:lgpd|privacidade|dpo|noreply|no-reply)@/i.test(email)) || candidates[0] || "";
+}
+
+function chooseBestWhatsapp(primary, fallback, deterministic, previous) {
+  const candidates = unique([primary, fallback, ...deterministic, previous].map(cleanPhone)).filter(isPlausibleBrazilianPhone);
+  return candidates[0] || "";
+}
+
+function chooseBestPhone(primary, aiPhones, deterministicPhones, previous, whatsapp) {
+  const candidates = unique([primary, ...toStringArray(aiPhones), ...deterministicPhones, previous].map(cleanPhone)).filter(isPlausibleBrazilianPhone);
+  return candidates.find((phone) => phone !== whatsapp) || candidates[0] || "";
+}
+
+function chooseRegistration(primary, deterministic, previous) {
+  return clean(primary) || firstValue(deterministic) || clean(previous);
+}
+
+function chooseLeadName(dossier, lead) {
+  return clean(dossier.leadName) || firstValue(dossier.professionalNames) || lead.name || lead.businessName || "";
+}
+
+function chooseSocial(primary, candidates, domain, previous) {
+  if (isValidSocialUrl(primary)) return primary;
+  const found = (candidates || []).find((value) => value.includes(domain) && isValidSocialUrl(value));
+  return found || (isValidSocialUrl(previous) ? previous : "");
+}
+
+function isPlausibleBrazilianPhone(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  const local = digits.startsWith("55") && digits.length >= 12 ? digits.slice(2) : digits;
+  if (![10, 11].includes(local.length)) return false;
+  if (/^(\d)\1+$/.test(local)) return false;
+  const ddd = Number(local.slice(0, 2));
+  if (ddd < 11 || ddd > 99) return false;
+  const subscriber = local.slice(2);
+  return subscriber.length === 8 || (subscriber.length === 9 && subscriber.startsWith("9"));
+}
+
+function normalizeLinks(value) {
+  const list = Array.isArray(value) ? value : String(value || "").split(/[\n,]/);
+  return unique(list.map(normalizeUrl).filter(Boolean));
+}
+
+function normalizeUrl(value) {
+  const text = String(value || "").trim();
+  if (!text || /\s/.test(text)) return "";
+  const candidate = /^https?:\/\//i.test(text) ? text : /^(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:[/:?#].*)?$/i.test(text) ? `https://${text}` : "";
+  if (!candidate) return "";
+  try {
+    const url = new URL(candidate);
+    if (!["http:", "https:"].includes(url.protocol)) return "";
+    if (!url.hostname.includes(".")) return "";
+    return url.toString();
+  } catch {
+    return "";
+  }
 }
 
 function extractFirstJsonObject(text) {
@@ -339,205 +543,16 @@ function extractFirstJsonObject(text) {
   return "";
 }
 
-async function resolveFirstModel(baseUrl, apiKey) {
-  const response = await fetch(`${baseUrl}/models`, {
-    cache: "no-store",
-    signal: AbortSignal.timeout(20000),
-    headers: { Authorization: `Bearer ${apiKey}` }
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload?.error?.message || `endpoint /models respondeu com status ${response.status}`);
-  const model = payload?.data?.find((item) => item?.id)?.id || payload?.models?.find((item) => item?.id)?.id || "";
-  if (!model) throw new Error("nenhum modelo foi retornado pelo endpoint /models");
-  return model;
-}
-
-function buildPrompt(lead, sources, failures, deterministic) {
-  const sourceText = sources
-    .map((source, index) => `\nFONTE ${index + 1}: ${source.url}\n${source.text}`)
-    .join("\n");
-
-  return `Analise todas as fontes públicas e crie ou atualize um dossiê comercial completo.
-
-OBJETIVOS OBRIGATÓRIOS:
-1. Identificar nome do responsável ou profissional principal.
-2. Identificar e-mail, WhatsApp, telefone, cidade e UF.
-3. Localizar registro profissional e conselho, sem inventar.
-4. LISTAR TODOS OS SERVIÇOS, SOLUÇÕES E ÁREAS DE ATUAÇÃO visíveis no site. Leia títulos, cards, menus e descrições. Não deixe services vazio quando a fonte contiver uma seção de serviços.
-5. Identificar equipe, especialidades e oportunidades comerciais.
-
-DADOS CONHECIDOS:
-${JSON.stringify({
-    name: lead.name,
-    businessName: lead.businessName,
-    website: lead.website,
-    phone: lead.phone,
-    address: lead.formattedAddress,
-    city: lead.city,
-    state: lead.state,
-    probableCouncil: lead.council,
-    niche: lead.specialty,
-    previousDossier: lead.dossier || null
-  })}
-
-EXTRAÇÃO DETERMINÍSTICA DO HTML — valide e aproveite estes dados:
-${JSON.stringify(deterministic)}
-
-FONTES LIDAS:
-${sourceText}
-
-FONTES BLOQUEADAS OU INACESSÍVEIS:
-${JSON.stringify(failures)}
-
-Retorne SOMENTE JSON válido neste formato:
-{"leadName":"","primaryEmail":"","primaryWhatsapp":"","primaryPhone":"","city":"","state":"","summary":"","professionalNames":[],"council":"","registration":"","registrationEvidence":"","specialties":[],"services":[],"emails":[],"phones":[],"whatsapp":"","instagram":"","facebook":"","linkedin":"","teamMembers":[],"companyName":"","cnpj":"","opportunities":[],"warnings":[],"confidence":0}
-
-Não invente informações. Em services, use nomes claros e individuais, por exemplo: "Projetos", "Execução de obras", "Direção técnica de obras".`;
-}
-
-function buildLikelyInternalPages(website) {
-  try {
-    const base = new URL(website);
-    return [
-      "servicos", "serviços", "solucoes", "soluções", "areas-de-atuacao", "projetos",
-      "contato", "fale-conosco", "sobre", "quem-somos", "equipe", "profissionais", "unidade"
-    ].map((slug) => new URL(`/${encodeURI(slug)}`, base.origin).toString());
-  } catch {
-    return [];
-  }
-}
-
-function extractEmails(raw) {
-  return unique((String(raw).match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [])
-    .filter((email) => !/example|sentry|wixpress|cloudflare|noreply|no-reply/i.test(email)));
-}
-
-function extractPhones(raw) {
-  return unique((String(raw).match(/(?:\+?55\s*)?(?:\(?\d{2}\)?\s*)?9?\d{4}[-.\s]?\d{4}/g) || [])
-    .map(cleanPhone)
-    .filter(isPlausibleBrazilianPhone));
-}
-
-function extractWhatsapp(raw) {
-  const text = String(raw);
-  const links = [...text.matchAll(/(?:wa\.me\/|api\.whatsapp\.com\/send\?phone=|whatsapp[^\d]{0,40})(\d{10,13})/gi)]
-    .map((match) => cleanPhone(match[1]))
-    .filter(isPlausibleBrazilianPhone);
-  return unique(links);
-}
-
-function extractRegistrations(raw) {
-  return unique((String(raw).match(/\b(?:OAB|CRM|CRO|CREA|CRP|CRC|CRN|CRF|COREN|CREFITO|CAU)[\s:/.-]*(?:[A-Z]{2}[\s:/.-]*)?\d{3,8}(?:[-/]\d+)?\b/gi) || [])
-    .map((value) => value.replace(/\s+/g, " ").trim()));
-}
-
-function extractSocialLinks(raw) {
-  return unique((String(raw).match(/https?:\\?\/\\?\/(?:www\.)?(?:instagram|facebook|linkedin)\.com[^"'<>\s\\]*/gi) || [])
-    .map((value) => value.replace(/\\/g, "")));
-}
-
-function extractServices(raw, pageText) {
-  const html = String(raw || "")
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ");
-  const candidates = [];
-  const tagPattern = /<(?:h1|h2|h3|h4|h5|h6|strong|b|article|figcaption)[^>]*>([\s\S]*?)<\/(?:h1|h2|h3|h4|h5|h6|strong|b|article|figcaption)>/gi;
-  for (const match of html.matchAll(tagPattern)) {
-    const value = cleanLabel(htmlToText(match[1]));
-    if (isServiceLabel(value)) candidates.push(value);
-  }
-
-  const knownPatterns = [
-    /projetos?/gi,
-    /execu[cç][aã]o de obras?/gi,
-    /dire[cç][aã]o t[eé]cnica de obras?/gi,
-    /licen[cç]as? do corpo de bombeiros?/gi,
-    /legaliza[cç][aã]o de obras?/gi,
-    /laudo(?:s)? para reforma/gi,
-    /regulariza[cç][aã]o de obras?/gi,
-    /consultoria(?:s)?(?: em engenharia)?/gi,
-    /engenharia civil/gi,
-    /projeto(?:s)? estrutural(?:is)?/gi,
-    /projeto(?:s)? el[eé]trico(?:s)?/gi,
-    /projeto(?:s)? hidr[aá]ulico(?:s)?/gi,
-    /preven[cç][aã]o contra inc[eê]ndio/gi
-  ];
-  const text = String(pageText || "");
-  for (const pattern of knownPatterns) {
-    for (const match of text.matchAll(pattern)) candidates.push(cleanLabel(match[0]));
-  }
-  return unique(candidates).slice(0, 40);
-}
-
-function extractSpecialties(pageText) {
-  const text = String(pageText || "");
-  const patterns = [
-    /engenharia civil/gi,
-    /engenharia estrutural/gi,
-    /engenharia el[eé]trica/gi,
-    /engenharia hidr[aá]ulica/gi,
-    /seguran[cç]a contra inc[eê]ndio/gi,
-    /dire[cç][aã]o t[eé]cnica/gi,
-    /gest[aã]o de obras/gi,
-    /arquitetura/gi
-  ];
-  return unique(patterns.flatMap((pattern) => [...text.matchAll(pattern)].map((match) => cleanLabel(match[0]))));
-}
-
-function isServiceLabel(value) {
-  if (!value || value.length < 3 || value.length > 90) return false;
-  if (/^(servi[cç]os?|saiba mais|or[cç]amento|contato|in[ií]cio|home|menu)$/i.test(value)) return false;
-  return /projeto|obra|engenharia|dire[cç][aã]o|licen[cç]a|legaliza|laudo|consultoria|regulariza|reforma|inspe[cç][aã]o|execu[cç][aã]o|vistoria|assessoria/i.test(value);
-}
-
-function cleanLabel(value) {
-  const normalized = String(value || "").replace(/\s+/g, " ").trim();
-  if (!normalized) return "";
-  return normalized
-    .toLocaleLowerCase("pt-BR")
-    .replace(/(^|\s)\S/g, (letter) => letter.toLocaleUpperCase("pt-BR"));
-}
-
 function isBlockedSocialPage(url, text) {
   if (!/instagram\.com|facebook\.com/i.test(url)) return false;
   return /faça login|log in|crie uma conta|browser is not supported|conteúdo não está disponível/i.test(text) || text.length < 500;
 }
 
-function chooseBestEmail(primary, aiEmails, deterministicEmails, previous) {
-  const candidates = unique([
-    clean(primary),
-    ...toStringArray(aiEmails),
-    ...toStringArray(deterministicEmails),
-    clean(previous)
-  ]);
-  return candidates.find((email) => !/^lgpd@|^privacidade@|^noreply@|^no-reply@/i.test(email)) || candidates[0] || "";
-}
-
-function chooseBestPhone(phones, previous) {
-  const candidates = unique([...toStringArray(phones), clean(previous)]).filter(isPlausibleBrazilianPhone);
-  return candidates[0] || "";
-}
-
-function isPlausibleBrazilianPhone(value) {
-  const digits = String(value || "").replace(/\D/g, "");
-  const local = digits.startsWith("55") && digits.length > 11 ? digits.slice(2) : digits;
-  if (![10, 11].includes(local.length)) return false;
-  if (/^(\d)\1+$/.test(local)) return false;
-  const ddd = Number(local.slice(0, 2));
-  return ddd >= 11 && ddd <= 99;
-}
-
 function buildFallbackSummary(lead, services, specialties) {
   const name = lead.businessName || lead.name || "O lead";
-  if (services.length) return `${name} oferece ${services.slice(0, 6).join(", ")}.`;
+  if (services.length) return `${name} oferece ${services.slice(0, 8).join(", ")}.`;
   if (specialties.length) return `${name} atua em ${specialties.slice(0, 6).join(", ")}.`;
-  return "Dossiê concluído com os dados públicos disponíveis.";
-}
-
-function normalizeConfidence(value) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return 0;
-  return Math.max(0, Math.min(1, number));
+  return "Dados públicos coletados, mas a análise semântica ficou incompleta.";
 }
 
 function hasDeterministicData(data) {
@@ -555,24 +570,10 @@ function toStringArray(value) {
   return [];
 }
 function cleanPhone(value) {
-  return String(value || "").replace(/[^\d+]/g, "");
+  return String(value || "").replace(/\D/g, "");
 }
-function findSocial(values, domain) {
-  return (values || []).find((value) => value.includes(domain)) || "";
-}
-function normalizeLinks(value) {
-  const list = Array.isArray(value) ? value : String(value || "").split(/[\n,]/);
-  return unique(list.map((item) => normalizeUrl(item)).filter(Boolean));
-}
-function normalizeUrl(value) {
-  const text = String(value || "").trim();
-  if (!text) return "";
-  try {
-    const url = new URL(/^https?:\/\//i.test(text) ? text : `https://${text}`);
-    return ["http:", "https:"].includes(url.protocol) ? url.toString() : "";
-  } catch {
-    return "";
-  }
+function cleanLabel(value) {
+  return String(value || "").replace(/\s+/g, " ").trim().toLocaleLowerCase("pt-BR").replace(/(^|\s)\S/g, (letter) => letter.toLocaleUpperCase("pt-BR"));
 }
 function htmlToText(html) {
   return decodeHtmlEntities(String(html || "")
@@ -603,6 +604,14 @@ function firstValue(value) {
 }
 function clean(value) {
   return String(value || "").trim();
+}
+function normalizeState(value) {
+  const state = clean(value).toUpperCase();
+  return /^[A-Z]{2}$/.test(state) ? state : "";
+}
+function normalizeConfidence(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.min(1, number)) : 0;
 }
 function calculateCompleteness({ name, email, whatsapp, city, state }) {
   const fields = [name, email, whatsapp, city, state];
