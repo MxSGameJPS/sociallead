@@ -59,6 +59,56 @@ async function createSafeRouter(context) {
   });
 }
 
+async function openPage(browser, websiteUrl) {
+  const normalized = normalizeWebsiteUrl(websiteUrl);
+  await assertPublicWebsiteUrl(normalized);
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 1100 },
+    deviceScaleFactor: 1,
+    isMobile: false,
+    hasTouch: false,
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125 Safari/537.36 LeadFlow/3.0",
+    ignoreHTTPSErrors: false,
+  });
+  await createSafeRouter(context);
+  const page = await context.newPage();
+  const response = await page.goto(normalized.toString(), { waitUntil: "domcontentloaded", timeout: SCREENSHOT_TIMEOUT_MS });
+  if (!response) {
+    await context.close();
+    throw new Error("O site não retornou uma resposta para o navegador.");
+  }
+  await assertPublicWebsiteUrl(new URL(page.url()));
+  try { await page.waitForLoadState("networkidle", { timeout: 7000 }); } catch {}
+  await page.waitForTimeout(1500);
+  return { context, page };
+}
+
+export async function renderWebsiteContent(websiteUrl) {
+  const chromium = await loadChromium();
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: true });
+  } catch (error) {
+    throw new Error(`O Chromium do Playwright não pôde ser iniciado. Execute npm run install:browser e reinicie o servidor. Detalhe: ${error.message}`);
+  }
+
+  try {
+    const { context, page } = await openPage(browser, websiteUrl);
+    try {
+      const [html, visibleText, links] = await Promise.all([
+        page.content(),
+        page.locator("body").innerText().catch(() => ""),
+        page.locator("a[href]").evaluateAll(elements => elements.map(element => ({ href: element.href, text: element.textContent || "" })).slice(0, 500)).catch(() => []),
+      ]);
+      return { url: page.url(), html, visibleText, links };
+    } finally {
+      await context.close();
+    }
+  } finally {
+    await browser.close();
+  }
+}
+
 async function captureViewport(browser, leadId, url, config) {
   const context = await browser.newContext({
     viewport: config.viewport,
