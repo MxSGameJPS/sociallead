@@ -16,6 +16,9 @@ export default function DashboardPage() {
   const [stats, setStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [statsError, setStatsError] = useState("");
+  const [addingToCrm, setAddingToCrm] = useState(false);
+  const [crmMessage, setCrmMessage] = useState("");
+  const [crmError, setCrmError] = useState("");
 
   const loadStats = useCallback(async () => {
     setStatsLoading(true);
@@ -38,13 +41,16 @@ export default function DashboardPage() {
     setResults(data.results || []);
     setFilters({ source: "google-places", query: data.textQuery || "" });
     setSelectedIds(new Set());
-    await loadStats();
+    setCrmMessage("");
+    setCrmError("");
   }
 
   async function handleImported(data) {
     setResults(data.results || []);
     setFilters({ council: "CRM", source: "cfm-json-import" });
     setSelectedIds(new Set());
+    setCrmMessage("");
+    setCrmError("");
     await loadStats();
   }
 
@@ -54,6 +60,35 @@ export default function DashboardPage() {
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
+  }
+
+  async function addSelectedToCrm(selectedRecords) {
+    if (!selectedRecords.length) return;
+    setAddingToCrm(true);
+    setCrmMessage("");
+    setCrmError("");
+    try {
+      const response = await fetch("/api/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leads: selectedRecords,
+          source: filters?.source || "manual-selection"
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Não foi possível adicionar os leads ao CRM.");
+
+      setCrmMessage(
+        `${selectedRecords.length} selecionado(s) processado(s): ${data.added} novo(s) e ${data.updated} atualizado(s). Total no CRM: ${data.total}.`
+      );
+      setSelectedIds(new Set());
+      await loadStats();
+    } catch (error) {
+      setCrmError(error?.message || "Não foi possível adicionar os leads ao CRM.");
+    } finally {
+      setAddingToCrm(false);
+    }
   }
 
   return (
@@ -66,7 +101,7 @@ export default function DashboardPage() {
         <div className={styles.topActions}>
           <div>
             <strong>Fluxo do MVP</strong>
-            <span>Descoberta → CRM → Dossiê → análise futura pelo OmniRoute</span>
+            <span>Descoberta → seleção → CRM → dossiê → análise pelo OmniRoute</span>
           </div>
           <Link className={styles.crmButton} href="/crm">Abrir CRM</Link>
         </div>
@@ -84,6 +119,10 @@ export default function DashboardPage() {
             onToggle={toggle}
             onSelectAll={() => setSelectedIds(new Set(results.map((item) => item.id)))}
             onClear={() => setSelectedIds(new Set())}
+            onAddToCrm={addSelectedToCrm}
+            addingToCrm={addingToCrm}
+            crmMessage={crmMessage}
+            crmError={crmError}
           />
         ) : null}
       </div>
