@@ -1,7 +1,0 @@
-{
-  "provider": "google",
-  "apiKey": "",
-  "model": "gemini-2.5-flash",
-  "baseUrl": "",
-  "temperature": 0.3
-}

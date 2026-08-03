@@ -1,0 +1,47 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Lead {
+  id            String   @id @default(cuid())
+  externalId    String?  @unique
+  source        String?
+  name          String
+  segment       String?
+  city          String?
+  location      String?
+  address       String?
+  score         Int      @default(0)
+  grade         String   @default("D")
+  phone         String?
+  whatsapp      String?
+  email         String?
+  instagram     String?
+  site          String?
+  weakSite      Boolean  @default(true)
+  googleRating  String?
+  googleReviews String?
+  followers     Int?
+  problem       String?
+  offer         String?
+  approach      String?
+  nextAction    String?
+  reason        String?
+  mapsLink      String?
+  bio           String?
+  stage         String   @default("novo")
+  notes         String   @default("")
+  proposalValue Int      @default(0)
+  landingStatus String   @default("none")
+  followUpAt    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([stage])
+  @@index([grade])
+}

@@ -1,0 +1,11 @@
+.card{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:14px;margin:0 18px 12px;border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:12px 14px;box-shadow:var(--shadow)}
+.card span,.card strong,.card p{display:block}
+.card span{color:var(--accent);font-size:9px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+.card strong{margin-top:3px;font-size:12px}
+.card p{margin:3px 0 0;color:var(--muted);font-size:9px}
+.control{display:flex;align-items:center;gap:8px}
+.control select{min-width:220px;border:1px solid var(--line-strong);background:var(--surface-2);color:var(--text);border-radius:9px;padding:9px 10px;font-size:10px;font-weight:750}
+.control a{display:inline-flex;align-items:center;min-height:36px;border:1px solid var(--accent);background:var(--accent-soft);color:var(--accent);border-radius:8px;padding:8px 10px;font-size:9px;font-weight:900;text-decoration:none}
+.card small{grid-column:1/-1;color:#15803d;font-size:9px}
+.card small.error{color:var(--danger)}
+@media(max-width:720px){.card{grid-template-columns:1fr;margin:0 10px 10px}.control{align-items:stretch;flex-direction:column}.control select{min-width:0;width:100%}.control a{justify-content:center}}

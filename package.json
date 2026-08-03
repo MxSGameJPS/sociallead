@@ -1,16 +1,33 @@
 {
-  "name": "buscador-registros-profissionais",
+  "name": "leadflow",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
+    "clean:next": "node scripts/clean-next.mjs",
     "dev": "next dev",
+    "dev:fast": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "seed": "node prisma/seed.js",
+    "migrate": "prisma migrate dev --name init",
+    "install:browser": "npm install --no-save --package-lock=false playwright@1.62.0 && npx playwright install chromium",
+    "test:services": "node tests/services.test.mjs",
+    "test:repo": "node tests/repo.test.mjs",
+    "test:ai": "node tests/ai.test.mjs",
+    "test:projects": "node tests/projects.test.mjs",
+    "test:consulting": "node tests/consulting.test.mjs",
+    "test": "npm run test:services && npm run test:repo && npm run test:ai && npm run test:projects && npm run test:consulting"
   },
   "dependencies": {
-    "next": "14.2.5",
-    "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "@prisma/client": "6.2.1",
+    "@supabase/ssr": "^0.12.4",
+    "@supabase/supabase-js": "^2.111.0",
+    "next": "15.1.6",
+    "react": "19.0.0",
+    "react-dom": "19.0.0"
+  },
+  "devDependencies": {
+    "prisma": "6.2.1"
   }
 }
