@@ -10,9 +10,7 @@ const ITEMS = [
   { href: "/crm", icon: "▤", label: "CRM" },
   { href: "/consultoria", icon: "✦", label: "Consultorias" },
   { href: "/agendamentos", icon: "□", label: "Agendamentos" },
-  { href: "/projetos", icon: "◇", label: "Meus projetos" },
   { href: "/cobrancas", icon: "R$", label: "Cobrar clientes" },
-  { href: "/criar-site", icon: "+", label: "Criar site" },
   { href: "/perfil", icon: "◉", label: "Perfil" },
 ];
 
