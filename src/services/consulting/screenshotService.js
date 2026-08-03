@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import { assertPublicWebsiteUrl, normalizeWebsiteUrl } from "./siteAuditService.js";
 import { saveGeneratedScreenshot } from "./assetStore.js";
 
-const SCREENSHOT_TIMEOUT_MS = 30_000;
+const SCREENSHOT_TIMEOUT_MS = 45_000;
 const require = createRequire(import.meta.url);
 
 export function resolveChromiumExport(playwrightModule) {
@@ -59,6 +59,23 @@ async function createSafeRouter(context) {
   });
 }
 
+async function autoScroll(page) {
+  await page.evaluate(async () => {
+    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+    let previousHeight = 0;
+    for (let index = 0; index < 18; index += 1) {
+      const height = Math.max(document.body?.scrollHeight || 0, document.documentElement?.scrollHeight || 0);
+      window.scrollTo(0, Math.min(height, index * Math.max(window.innerHeight * 0.85, 700)));
+      await sleep(180);
+      if (height === previousHeight && window.scrollY + window.innerHeight >= height - 20) break;
+      previousHeight = height;
+    }
+    window.scrollTo(0, Math.max(document.body?.scrollHeight || 0, document.documentElement?.scrollHeight || 0));
+    await sleep(350);
+    window.scrollTo(0, 0);
+  }).catch(() => {});
+}
+
 async function openPage(browser, websiteUrl) {
   const normalized = normalizeWebsiteUrl(websiteUrl);
   await assertPublicWebsiteUrl(normalized);
@@ -67,7 +84,9 @@ async function openPage(browser, websiteUrl) {
     deviceScaleFactor: 1,
     isMobile: false,
     hasTouch: false,
-    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125 Safari/537.36 LeadFlow/3.0",
+    javaScriptEnabled: true,
+    locale: "pt-BR",
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125 Safari/537.36 LeadFlow/4.0",
     ignoreHTTPSErrors: false,
   });
   await createSafeRouter(context);
@@ -78,9 +97,63 @@ async function openPage(browser, websiteUrl) {
     throw new Error("O site não retornou uma resposta para o navegador.");
   }
   await assertPublicWebsiteUrl(new URL(page.url()));
-  try { await page.waitForLoadState("networkidle", { timeout: 7000 }); } catch {}
-  await page.waitForTimeout(1500);
+  try { await page.waitForLoadState("networkidle", { timeout: 10_000 }); } catch {}
+  await page.waitForTimeout(1800);
+  await autoScroll(page);
+  await page.waitForTimeout(700);
   return { context, page };
+}
+
+function uniqueText(values, limit = 4000) {
+  const seen = new Set();
+  const result = [];
+  for (const value of values) {
+    const text = String(value || "").replace(/\u0000/g, "").replace(/\s+/g, " ").trim();
+    if (!text || seen.has(text)) continue;
+    seen.add(text);
+    result.push(text);
+    if (result.length >= limit) break;
+  }
+  return result;
+}
+
+function deobfuscateContactText(text) {
+  return String(text || "")
+    .replace(/\s*(?:\[|\(|\{)?\s*(?:at|arroba)\s*(?:\]|\)|\})?\s*/gi, "@")
+    .replace(/\s*(?:\[|\(|\{)?\s*(?:dot|ponto)\s*(?:\]|\)|\})?\s*/gi, ".")
+    .replace(/&#64;|&commat;/gi, "@")
+    .replace(/&#46;|&period;/gi, ".");
+}
+
+async function collectFrameSignals(frame) {
+  try {
+    return await frame.evaluate(() => {
+      const values = [];
+      const add = value => {
+        const text = String(value || "").trim();
+        if (text) values.push(text);
+      };
+
+      add(document.body?.innerText || "");
+      add(document.title || "");
+      add(document.documentElement?.getAttribute("lang") || "");
+
+      const attributes = ["href", "src", "content", "title", "alt", "aria-label", "data-email", "data-phone", "data-whatsapp", "data-contact", "value"];
+      for (const element of document.querySelectorAll("*")) {
+        for (const name of attributes) add(element.getAttribute?.(name));
+        if (element.tagName === "SCRIPT" && /application\/(?:ld\+json|json)/i.test(element.type || "")) add(element.textContent || "");
+        if (element.shadowRoot) {
+          add(element.shadowRoot.textContent || "");
+          for (const shadowElement of element.shadowRoot.querySelectorAll("*")) {
+            for (const name of attributes) add(shadowElement.getAttribute?.(name));
+          }
+        }
+      }
+      return values;
+    });
+  } catch {
+    return [];
+  }
 }
 
 export async function renderWebsiteContent(websiteUrl) {
@@ -95,12 +168,43 @@ export async function renderWebsiteContent(websiteUrl) {
   try {
     const { context, page } = await openPage(browser, websiteUrl);
     try {
-      const [html, visibleText, links] = await Promise.all([
-        page.content(),
-        page.locator("body").innerText().catch(() => ""),
-        page.locator("a[href]").evaluateAll(elements => elements.map(element => ({ href: element.href, text: element.textContent || "" })).slice(0, 500)).catch(() => []),
-      ]);
-      return { url: page.url(), html, visibleText, links };
+      const html = await page.content();
+      const links = await page.locator("a[href]").evaluateAll(elements => elements.map(element => ({
+        href: element.href,
+        text: element.textContent || "",
+        ariaLabel: element.getAttribute("aria-label") || "",
+        title: element.getAttribute("title") || "",
+      })).slice(0, 1200)).catch(() => []);
+
+      const frameSignals = [];
+      for (const frame of page.frames()) frameSignals.push(...await collectFrameSignals(frame));
+
+      const responseSignals = await page.evaluate(() => {
+        const values = [];
+        const push = value => {
+          const text = String(value || "").trim();
+          if (text) values.push(text);
+        };
+        for (const meta of document.querySelectorAll("meta[content]")) push(meta.content);
+        for (const link of document.querySelectorAll("link[href]")) push(link.href);
+        for (const element of document.querySelectorAll("[onclick], [data-href], [data-url]")) {
+          push(element.getAttribute("onclick"));
+          push(element.getAttribute("data-href"));
+          push(element.getAttribute("data-url"));
+        }
+        return values;
+      }).catch(() => []);
+
+      const linkSignals = links.flatMap(item => [item.href, item.text, item.ariaLabel, item.title]);
+      const allSignals = uniqueText([...frameSignals, ...responseSignals, ...linkSignals], 6000);
+      const visibleText = deobfuscateContactText(allSignals.join("\n")).slice(0, 350000);
+
+      return {
+        url: page.url(),
+        html: `${html}\n<!-- LEADFLOW_RENDERED_SIGNALS\n${visibleText}\n-->`,
+        visibleText,
+        links,
+      };
     } finally {
       await context.close();
     }
