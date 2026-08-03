@@ -2,19 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import * as repo from "../../repositories/leadRepository.js";
-import { generateConsultingAudit } from "../../services/ai/consultingAuditService.js";
-import { auditWebsite } from "../../services/consulting/siteAuditService.js";
 import { enrichLeadContacts } from "../../services/consulting/contactEnrichmentService.js";
-import { captureWebsiteScreenshots } from "../../services/consulting/screenshotService.js";
-import { deleteConsultingAsset, listConsultingAssets, readConsultingImagesForAI, saveUploadedConsultingImages } from "../../services/consulting/assetStore.js";
+import { deleteConsultingAsset, listConsultingAssets, saveUploadedConsultingImages } from "../../services/consulting/assetStore.js";
 import { validateConsultingStage } from "../../services/consulting/stages.js";
 import { validateCommercialTrack } from "../../services/leads/commercialTrack.js";
-import { getProfessionalProfile } from "../../services/profile/profileStore.js";
+import { saveLeadEnrichment } from "../../services/leads/leadEnrichmentStore.js";
 import { getLeadWorkspace, saveLeadWorkspace } from "../../services/workspaces/leadWorkspaceStore.js";
 
 function refresh(leadId) {
-  revalidatePath("/consultoria");
-  revalidatePath(`/consultoria/${leadId}`);
   revalidatePath("/crm");
   revalidatePath(`/crm/${leadId}`);
   revalidatePath("/dashboard");
@@ -35,6 +30,7 @@ function clean(value, max = 500) {
 function buildLeadContactPatch(lead, enrichment) {
   const patch = {};
   const name = clean(enrichment?.name, 180);
+  const profession = clean(enrichment?.profession, 180);
   const email = clean(enrichment?.email, 320).toLowerCase();
   const whatsapp = clean(enrichment?.whatsapp, 30).replace(/\D/g, "");
   const phone = clean(enrichment?.phone, 30).replace(/\D/g, "");
@@ -42,6 +38,7 @@ function buildLeadContactPatch(lead, enrichment) {
   const state = clean(enrichment?.state, 2).toUpperCase();
 
   if (name && (!lead.name || lead.name === "(sem nome)" || name.length > lead.name.length)) patch.name = name;
+  if (profession) patch.segment = profession;
   if (email) patch.email = email;
   if (whatsapp) patch.whatsapp = whatsapp;
   if (phone && !lead.phone) patch.phone = phone;
@@ -64,9 +61,9 @@ export async function enrichLeadDataAction(payload = {}) {
   const instagramUrl = clean(payload.instagramUrl || workspace.consulting.instagramUrl || lead.instagram || "", 1200);
   const instagramNotes = clean(payload.instagramNotes || workspace.consulting.instagramNotes || "", 12000);
 
-  if (!websiteUrl && !instagramNotes) {
-    throw new Error("Informe o site ou cole informações públicas para a IA analisar.");
-  }
+  if (!websiteUrl && !instagramNotes) throw new Error("Informe o site ou cole informações públicas para a IA analisar.");
+
+  await saveLeadWorkspace(lead.id, { consulting: { websiteUrl, instagramUrl, instagramNotes } });
 
   const enrichment = await enrichLeadContacts({
     lead,
@@ -76,33 +73,13 @@ export async function enrichLeadDataAction(payload = {}) {
     providerId: payload.providerId || undefined,
   });
 
-  const leadPatch = buildLeadContactPatch(lead, enrichment);
+  const savedEnrichment = await saveLeadEnrichment(lead.id, enrichment);
+  const leadPatch = buildLeadContactPatch(lead, savedEnrichment);
   if (Object.keys(leadPatch).length) await repo.updateLead(lead.id, leadPatch);
-
-  const savedWorkspace = await saveLeadWorkspace(lead.id, {
-    consulting: {
-      websiteUrl,
-      instagramUrl,
-      instagramNotes,
-      contactEnrichment: enrichment,
-      council: enrichment.council || "",
-      registration: enrichment.registration || "",
-      lastAnalyzedAt: new Date().toISOString(),
-      status: "ready",
-    },
-  });
 
   const updatedLead = await repo.getLead(lead.id);
   refresh(lead.id);
-
-  return {
-    lead: updatedLead || { ...lead, ...leadPatch },
-    enrichment: {
-      ...enrichment,
-      profession: clean(updatedLead?.segment || lead.segment || "", 180),
-    },
-    consulting: savedWorkspace.consulting,
-  };
+  return { lead: updatedLead || { ...lead, ...leadPatch }, enrichment: savedEnrichment };
 }
 
 export async function setCommercialTrackAction(leadId, track) {
@@ -123,7 +100,6 @@ export async function uploadConsultingImagesAction(formData) {
   const leadId = String(formData?.get?.("leadId") || "");
   const lead = await requireLead(leadId);
   const assets = await saveUploadedConsultingImages(lead.id, formData.getAll("images"));
-  await saveLeadWorkspace(lead.id, { commercialTrack: "consulting" });
   refresh(lead.id);
   return assets;
 }
@@ -136,69 +112,17 @@ export async function deleteConsultingImageAction(leadId, assetId) {
 }
 
 export async function generateConsultingAuditAction(payload = {}) {
-  const lead = await requireLead(payload.leadId);
-  const [profile, workspace] = await Promise.all([getProfessionalProfile(), getLeadWorkspace(lead.id)]);
-  const websiteUrl = payload.websiteUrl || workspace.consulting.websiteUrl || lead.site || "";
-  const instagramUrl = payload.instagramUrl || workspace.consulting.instagramUrl || lead.instagram || "";
-  const instagramNotes = payload.instagramNotes || workspace.consulting.instagramNotes || "";
-  const priceCents = payload.priceCents ?? workspace.consulting.priceCents;
-
-  await saveLeadWorkspace(lead.id, {
-    commercialTrack: workspace.commercialTrack === "both" ? "both" : "consulting",
-    consulting: { status: "analyzing", stage: "novo", websiteUrl, instagramUrl, instagramNotes, priceCents },
-  });
-
-  let websiteAudit = null;
-  let screenshotWarning = "";
-  if (websiteUrl) {
-    try {
-      websiteAudit = await auditWebsite(websiteUrl);
-      try {
-        await captureWebsiteScreenshots(lead.id, websiteAudit.url || websiteUrl);
-      } catch (error) {
-        screenshotWarning = `As capturas automáticas não foram atualizadas: ${error.message}`;
-      }
-    } catch (error) {
-      websiteAudit = { error: error.message, requestedUrl: websiteUrl };
-    }
-  }
-
-  let contactEnrichment = null;
-  try {
-    contactEnrichment = await enrichLeadContacts({ lead, websiteUrl, instagramUrl, instagramNotes, providerId: payload.providerId || undefined });
-    const leadPatch = buildLeadContactPatch(lead, contactEnrichment);
-    if (Object.keys(leadPatch).length) await repo.updateLead(lead.id, leadPatch);
-    await saveLeadWorkspace(lead.id, { consulting: { contactEnrichment, council: contactEnrichment.council || "", registration: contactEnrichment.registration || "" } });
-  } catch (error) {
-    contactEnrichment = {
-      name: lead.name || "",
-      email: lead.email || "",
-      whatsapp: lead.whatsapp || "",
-      phone: lead.phone || "",
-      city: lead.city || "",
-      state: lead.location || "",
-      council: workspace.consulting.council || "",
-      registration: workspace.consulting.registration || "",
-      confidence: 0,
-      evidence: [],
-      sources: [],
-      inaccessibleSources: [],
-      warning: clean(error.message, 500),
-    };
-  }
-
-  const refreshedLead = await repo.getLead(lead.id);
-  const images = await readConsultingImagesForAI(lead.id);
-  const result = await generateConsultingAudit({ lead: refreshedLead || lead, profile, websiteAudit, websiteUrl, instagramUrl, instagramNotes, priceCents, providerId: payload.providerId || undefined, images, screenshotWarning });
-
-  refresh(lead.id);
-  return { ...result, contactEnrichment, lead: refreshedLead || lead, assets: await listConsultingAssets(lead.id) };
+  const result = await enrichLeadDataAction(payload);
+  return {
+    lead: result.lead,
+    contactEnrichment: result.enrichment,
+    assets: await listConsultingAssets(payload.leadId),
+  };
 }
 
 export async function promoteConsultingLeadAction(leadId) {
   const lead = await requireLead(leadId);
   await repo.moveStage(lead.id, "novo");
-  await saveLeadWorkspace(lead.id, { commercialTrack: "both", consulting: { stage: "cliente", status: "converted", deliveredAt: new Date().toISOString() } });
   refresh(lead.id);
-  return { id: lead.id, commercialTrack: "both", stage: "novo" };
+  return { id: lead.id, stage: "novo" };
 }
