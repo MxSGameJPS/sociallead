@@ -1,0 +1,30 @@
+{
+  "name": "Dra. Nathâna Garcia",
+  "profession": "Dentista",
+  "email": "",
+  "whatsapp": "5551995154636",
+  "phone": "5551995154636",
+  "city": "Dois Irmãos",
+  "state": "RS",
+  "council": "",
+  "registration": "",
+  "confidence": 70,
+  "evidence": [
+    "Dra. Nathâna Garcia Dentista em Dois Irmãos",
+    "DENTISTA EM DOIS IRMÃOS",
+    "R. Berlim, 44 - Sl 04 - Centro, Dois Irmãos - RS, 93950-000",
+    "whatsapp 5551995154636"
+  ],
+  "sources": [
+    "https://dentistanathanagarcia.my.canva.site/"
+  ],
+  "inaccessibleSources": [],
+  "ai": {
+    "used": true,
+    "providerName": "OmniRoute",
+    "model": "meu-combo",
+    "warning": ""
+  },
+  "updatedAt": "2026-08-03T08:03:52.984Z",
+  "validationTag": "NÃO VALIDADO"
+}

@@ -1,0 +1,35 @@
+{
+  "name": "Daniela Ferronato Breunig",
+  "profession": "Dentista",
+  "email": "",
+  "whatsapp": "5551984125942",
+  "phone": "5551984125942",
+  "city": "Dois Irmãos",
+  "state": "RS",
+  "council": "",
+  "registration": "",
+  "confidence": 70,
+  "evidence": [
+    "Daniela Ferronato Breunig",
+    "Dentista e consultório odontológico",
+    "Odontologia Estética Especialista em Prótese e Dentística",
+    "Rua Berlim 231 sala 4, Dois Irmãos",
+    "phone: (51) 98412-5942",
+    "state: RS"
+  ],
+  "sources": [],
+  "inaccessibleSources": [
+    {
+      "url": "https://meulink.com.vc/dra-daniela-f-breunig-2/",
+      "error": "HTTP 404"
+    }
+  ],
+  "ai": {
+    "used": true,
+    "providerName": "OmniRoute",
+    "model": "meu-combo",
+    "warning": ""
+  },
+  "updatedAt": "2026-08-03T08:07:46.202Z",
+  "validationTag": "NÃO VALIDADO"
+}
