@@ -11,7 +11,11 @@ export default function ResultsTable({
   selectedIds,
   onToggle,
   onSelectAll,
-  onClear
+  onClear,
+  onAddToCrm,
+  addingToCrm,
+  crmMessage,
+  crmError
 }) {
   const total = results.length;
   const selectedCount = selectedIds.size;
@@ -43,17 +47,28 @@ export default function ResultsTable({
             type="button"
             className={styles.secondary}
             onClick={onClear}
-            disabled={selectedCount === 0}
+            disabled={selectedCount === 0 || addingToCrm}
           >
             Limpar seleção
+          </button>
+          <button
+            type="button"
+            className={styles.primary}
+            onClick={() => onAddToCrm(selectedRecords)}
+            disabled={selectedCount === 0 || addingToCrm}
+          >
+            {addingToCrm ? "Adicionando ao CRM..." : `Adicionar selecionados ao CRM (${selectedCount})`}
           </button>
           <ExportButton
             records={selectedRecords}
             filters={filters}
-            disabled={selectedCount === 0}
+            disabled={selectedCount === 0 || addingToCrm}
           />
         </div>
       </div>
+
+      {crmMessage ? <p className={styles.success}>{crmMessage}</p> : null}
+      {crmError ? <p className={styles.error}>{crmError}</p> : null}
 
       <div className={styles.grid}>
         {results.map((record) => (
