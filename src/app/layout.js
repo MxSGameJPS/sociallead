@@ -3,7 +3,7 @@ import AppShell from "../components/AppShell/AppShell.jsx";
 
 export const metadata = {
   title: "LeadFlow — Prospecção e CRM local",
-  description: "Gestão local de leads, CRM, IA e projetos",
+  description: "Gestão local de leads, CRM, IA e acompanhamento comercial",
 };
 
 export default function RootLayout({ children }) {
