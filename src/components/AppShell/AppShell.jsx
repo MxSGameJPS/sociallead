@@ -7,8 +7,7 @@ import s from "./AppShell.module.css";
 const ITEMS = [
   { href: "/dashboard", icon: "▦", label: "Dashboard" },
   { href: "/leads", icon: "◎", label: "Leads" },
-  { href: "/crm", icon: "▤", label: "CRM" },
-  { href: "/consultoria", icon: "✦", label: "Consultorias" },
+  { href: "/crm", icon: "▤", label: "CRM e Consultorias" },
   { href: "/agendamentos", icon: "□", label: "Agendamentos" },
   { href: "/cobrancas", icon: "R$", label: "Cobrar clientes" },
   { href: "/perfil", icon: "◉", label: "Perfil" },
@@ -59,7 +58,8 @@ export default function AppShell({ children }) {
 
         <nav className={s.nav} aria-label="Navegação principal">
           {ITEMS.map(item => {
-            const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href + "/"));
+            const crmActive = item.href === "/crm" && (pathname.startsWith("/crm") || pathname.startsWith("/consultoria"));
+            const active = crmActive || pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href + "/"));
             return <a key={item.href} href={item.href} className={active ? s.active : ""} title={item.label}><span className={s.icon}>{item.icon}</span><span className={s.label}>{item.label}</span></a>;
           })}
         </nav>
