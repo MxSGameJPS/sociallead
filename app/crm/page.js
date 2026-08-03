@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import styles from "./page.module.css";
+import { generateCSV } from "../../lib/csv/export.js";
 
 export default function CrmPage() {
   const [leads, setLeads] = useState([]);
@@ -62,6 +63,26 @@ export default function CrmPage() {
       .filter(Boolean).join(" ").toLowerCase().includes(term));
   }, [leads, query]);
 
+  function exportCRM() {
+    if (!filtered.length) return;
+
+    const csv = generateCSV(filtered);
+    const date = new Date().toISOString().slice(0, 10);
+    const suffix = query.trim() ? "-filtrados" : "";
+    const fileName = `sociallead-crm${suffix}-${date}.csv`;
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = fileName;
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   return (
     <main className={styles.page}>
       <header className={styles.header}>
@@ -76,7 +97,16 @@ export default function CrmPage() {
       <section className={styles.toolbar}>
         <strong>{leads.length.toLocaleString("pt-BR")} registros salvos</strong>
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nome, e-mail, WhatsApp, cidade ou nicho" />
-        <button onClick={loadLeads}>Atualizar</button>
+        <button type="button" onClick={loadLeads}>Atualizar</button>
+        <button
+          type="button"
+          className={styles.exportButton}
+          onClick={exportCRM}
+          disabled={loading || filtered.length === 0}
+          title={query.trim() ? "Baixar os resultados filtrados" : "Baixar todos os leads do CRM"}
+        >
+          Baixar CSV ({filtered.length})
+        </button>
       </section>
 
       <section className={styles.layout}>
