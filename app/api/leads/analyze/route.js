@@ -49,16 +49,27 @@ export async function POST(request) {
   }
 
   const apiKey = settings.apiKey || settings.key || settings.token || "";
-  const model = settings.model || "";
   const baseUrl = String(settings.baseUrl || settings.url || "http://localhost:20128/v1")
     .replace(/\/$/, "");
   const temperature = Number(settings.temperature ?? 0.3);
+  let model = String(settings.model || "").trim();
 
-  if (!apiKey || !model || !baseUrl) {
+  if (!apiKey || !baseUrl) {
     return NextResponse.json(
-      { error: "A configuração da IA está incompleta. Informe chave, modelo e URL base." },
+      { error: "A configuração da IA está incompleta. Informe a chave e a URL base." },
       { status: 400 }
     );
+  }
+
+  if (!model) {
+    try {
+      model = await resolveFirstModel(baseUrl, apiKey);
+    } catch (error) {
+      return NextResponse.json(
+        { error: `A conexão está configurada, mas nenhum modelo foi informado e não foi possível detectá-lo automaticamente: ${error.message}` },
+        { status: 400 }
+      );
+    }
   }
 
   const sources = [];
@@ -168,7 +179,8 @@ export async function POST(request) {
       ...dossier,
       analyzedSources: sources.map((source) => source.url),
       inaccessibleSources: failures,
-      generatedAt: now
+      generatedAt: now,
+      modelUsed: model
     },
     dossierGeneratedAt: now,
     lastSeenAt: now
@@ -178,6 +190,21 @@ export async function POST(request) {
   await fs.writeFile(LEADS_FILE, JSON.stringify(leads, null, 2), "utf-8");
 
   return NextResponse.json({ lead: updatedLead, dossier: updatedLead.dossier });
+}
+
+async function resolveFirstModel(baseUrl, apiKey) {
+  const response = await fetch(`${baseUrl}/models`, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(20000),
+    headers: { Authorization: `Bearer ${apiKey}` }
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.error?.message || `endpoint /models respondeu com status ${response.status}`);
+  }
+  const model = payload?.data?.find((item) => item?.id)?.id || payload?.models?.find((item) => item?.id)?.id || "";
+  if (!model) throw new Error("nenhum modelo foi retornado pelo endpoint /models");
+  return model;
 }
 
 function buildPrompt(lead, sources, failures) {
