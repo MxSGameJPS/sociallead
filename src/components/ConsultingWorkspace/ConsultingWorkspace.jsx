@@ -18,6 +18,15 @@ function display(value) {
   return String(value || "").trim() || "Não encontrado";
 }
 
+function validationTagFor(data = {}) {
+  const hasEmail = Boolean(String(data.email || "").trim());
+  const hasRegistration = Boolean(String(data.registration || "").trim());
+  if (hasEmail && hasRegistration) return "VALIDADO";
+  if (hasEmail) return "FALTA REGISTRO";
+  if (hasRegistration) return "FALTA EMAIL";
+  return "NÃO VALIDADO";
+}
+
 export default function ConsultingWorkspace({ initialLead, initialWorkspace }) {
   const router = useRouter();
   const initial = initialWorkspace.consulting || {};
@@ -36,6 +45,7 @@ export default function ConsultingWorkspace({ initialLead, initialWorkspace }) {
     profession: initialEnrichment.profession || initialLead.segment || "",
     council: initialEnrichment.council || initial.council || "",
     registration: initialEnrichment.registration || initial.registration || "",
+    validationTag: initialEnrichment.validationTag || validationTagFor({ email: initialEnrichment.email || initialLead.email, registration: initialEnrichment.registration || initial.registration }),
     confidence: initialEnrichment.confidence || 0,
     evidence: initialEnrichment.evidence || [],
     sources: initialEnrichment.sources || [],
@@ -77,8 +87,7 @@ export default function ConsultingWorkspace({ initialLead, initialWorkspace }) {
       const result = await enrichLeadDataAction({ leadId: lead.id, websiteUrl, instagramUrl, instagramNotes });
       setLead(result.lead);
       setEnrichment(result.enrichment);
-      const found = [result.enrichment.email && "e-mail", result.enrichment.whatsapp && "WhatsApp", result.enrichment.registration && "registro profissional"].filter(Boolean);
-      showNotice(found.length ? `Análise concluída. Dados encontrados: ${found.join(", ")}.` : "Análise concluída, mas nenhum novo contato foi localizado.");
+      showNotice(`Análise concluída: ${result.enrichment.validationTag || validationTagFor(result.enrichment)}.`);
       router.refresh();
     } catch (error) {
       showNotice(`Erro na análise: ${error.message}`, "error");
@@ -86,6 +95,8 @@ export default function ConsultingWorkspace({ initialLead, initialWorkspace }) {
       setBusy(false);
     }
   }
+
+  const validationTag = enrichment.validationTag || validationTagFor(enrichment);
 
   return <main className={s.page}>
     <header className={s.header}>
@@ -114,11 +125,16 @@ export default function ConsultingWorkspace({ initialLead, initialWorkspace }) {
         <label><span>Outros dados públicos</span><textarea value={instagramNotes} onChange={event => setInstagramNotes(event.target.value)} placeholder="Cole aqui links adicionais, bio do Instagram, texto do Facebook, Linktree, nome de profissionais ou outras informações públicas." /></label>
 
         <button className={s.primary} type="button" disabled={busy} onClick={analyzeLead}>{busy ? "Analisando fontes..." : "Analisar e atualizar CRM"}</button>
-        <small>A análise prioriza nome, e-mail, WhatsApp, cidade, estado e profissão. O registro profissional é buscado quando houver evidência pública.</small>
+        <small>A análise prioriza e-mail e registro profissional. A tag é definida automaticamente após a análise.</small>
       </div>
 
       <div className={s.card}>
         <div className={s.cardHead}><div><span>Resultado</span><h2>Dados encontrados</h2></div><span className={s.confidence}>{Number(enrichment.confidence || 0)}% confiança</span></div>
+
+        <div className={s.crmStatus}>
+          <strong>TAG: {validationTag}</strong>
+          <p>VALIDADO exige e-mail e registro. Quando faltar um deles, o sistema informa exatamente qual dado ainda precisa ser localizado.</p>
+        </div>
 
         <div className={s.dataGrid}>
           <article><span>Nome</span><strong>{display(enrichment.name || lead.name)}</strong></article>
@@ -129,11 +145,6 @@ export default function ConsultingWorkspace({ initialLead, initialWorkspace }) {
           <article><span>Estado</span><strong>{display(enrichment.state || lead.location)}</strong></article>
           <article><span>Conselho</span><strong>{display(enrichment.council)}</strong></article>
           <article><span>Número de registro</span><strong>{display(enrichment.registration)}</strong></article>
-        </div>
-
-        <div className={s.crmStatus}>
-          <strong>CRM atualizado automaticamente</strong>
-          <p>Nome, e-mail, WhatsApp, cidade e estado encontrados são salvos no cadastro principal do lead.</p>
         </div>
       </div>
     </section>
