@@ -1,22 +1,18 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import styles from "./page.module.css";
 import Header from "../../components/dashboard/Header/Header.js";
 import BaseStats from "../../components/dashboard/BaseStats/BaseStats.js";
-import SearchForm from "../../components/search/SearchForm/SearchForm.js";
+import PlacesSearch from "../../components/search/PlacesSearch/PlacesSearch.js";
 import JsonImport from "../../components/search/JsonImport/JsonImport.js";
 import ResultsTable from "../../components/search/ResultsTable/ResultsTable.js";
 
 export default function DashboardPage() {
   const [results, setResults] = useState([]);
-  const [isMock, setIsMock] = useState(false);
-  const [pendingIntegration, setPendingIntegration] = useState(false);
   const [filters, setFilters] = useState(null);
   const [selectedIds, setSelectedIds] = useState(new Set());
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [searched, setSearched] = useState(false);
   const [stats, setStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [statsError, setStatsError] = useState("");
@@ -27,9 +23,7 @@ export default function DashboardPage() {
     try {
       const response = await fetch("/api/leads/stats", { cache: "no-store" });
       const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Não foi possível carregar a base local.");
-      }
+      if (!response.ok) throw new Error(data.error || "Não foi possível carregar a base local.");
       setStats(data);
     } catch (err) {
       setStatsError(err?.message || "Não foi possível carregar a base local.");
@@ -38,107 +32,58 @@ export default function DashboardPage() {
     }
   }, []);
 
-  useEffect(() => {
-    loadStats();
-  }, [loadStats]);
+  useEffect(() => { loadStats(); }, [loadStats]);
 
-  async function handleSearch(formData) {
-    setLoading(true);
-    setError(null);
+  async function handlePlacesResults(data) {
+    setResults(data.results || []);
+    setFilters({ source: "google-places", query: data.textQuery || "" });
     setSelectedIds(new Set());
-    try {
-      const res = await fetch("/api/registries/search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData)
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setResults(data.results || []);
-        setIsMock(Boolean(data.isMock));
-        setPendingIntegration(Boolean(data.pendingIntegration));
-        setFilters(data.filters || formData);
-        setSearched(true);
-        await loadStats();
-      } else {
-        setResults([]);
-        setError(data.error || "Não foi possível consultar este conselho agora.");
-        setSearched(true);
-      }
-    } catch {
-      setResults([]);
-      setError("Não foi possível consultar este conselho agora.");
-      setSearched(true);
-    } finally {
-      setLoading(false);
-    }
+    await loadStats();
   }
 
   async function handleImported(data) {
     setResults(data.results || []);
-    setIsMock(false);
-    setPendingIntegration(false);
     setFilters({ council: "CRM", source: "cfm-json-import" });
     setSelectedIds(new Set());
-    setError(null);
-    setSearched(true);
     await loadStats();
   }
 
   function toggle(id) {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
-  }
-
-  function selectAll() {
-    setSelectedIds(new Set(results.map((r) => r.id)));
-  }
-
-  function clearSelection() {
-    setSelectedIds(new Set());
   }
 
   return (
     <>
       <Header
-        title="Buscador de Registros Profissionais"
-        subtitle="Consulte registros, importe respostas oficiais e exporte em CSV."
+        title="SocialLead — Descoberta de Profissionais"
+        subtitle="Encontre leads pelo Google Places, importe bases oficiais e monte dossiês no CRM local."
       />
       <div className={styles.content}>
-        <BaseStats stats={stats} loading={statsLoading} error={statsError} />
-        <JsonImport onImported={handleImported} disabled={loading} />
-        <SearchForm onSearch={handleSearch} loading={loading} />
-
-        {loading ? (
-          <p className={styles.info}>Buscando registros...</p>
-        ) : null}
-
-        {error ? <div className={styles.error}>{error}</div> : null}
-
-        {!loading && !error && searched && results.length === 0 && pendingIntegration ? (
-          <div className={styles.notice}>
-            Este conselho ainda não possui integração automática de consulta.
-            A arquitetura está preparada para receber um conector real.
+        <div className={styles.topActions}>
+          <div>
+            <strong>Fluxo do MVP</strong>
+            <span>Descoberta → CRM → Dossiê → análise futura pelo OmniRoute</span>
           </div>
-        ) : null}
+          <Link className={styles.crmButton} href="/crm">Abrir CRM</Link>
+        </div>
 
-        {!loading && !error && searched && results.length === 0 && !pendingIntegration ? (
-          <p className={styles.info}>Nenhum registro encontrado para os filtros informados.</p>
-        ) : null}
+        <BaseStats stats={stats} loading={statsLoading} error={statsError} />
+        <PlacesSearch onResults={handlePlacesResults} />
+        <JsonImport onImported={handleImported} />
 
-        {!loading && results.length > 0 ? (
+        {results.length > 0 ? (
           <ResultsTable
             results={results}
-            isMock={isMock}
+            isMock={false}
             filters={filters}
             selectedIds={selectedIds}
             onToggle={toggle}
-            onSelectAll={selectAll}
-            onClear={clearSelection}
+            onSelectAll={() => setSelectedIds(new Set(results.map((item) => item.id)))}
+            onClear={() => setSelectedIds(new Set())}
           />
         ) : null}
       </div>
