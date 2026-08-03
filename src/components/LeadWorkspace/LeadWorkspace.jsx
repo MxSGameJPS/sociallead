@@ -13,32 +13,23 @@ const TABS = [
   ["info", "Informações"],
   ["scripts", "Roteiros"],
   ["objections", "Objeções"],
-  ["site", "Site"],
   ["sale", "Venda"],
   ["schedule", "Agendar"],
 ];
 
 const UNIVERSAL_OBJECTIONS = [
   ["Não tenho dinheiro / está caro", "Entendo. Antes de falar em valor, posso te perguntar o que precisaria acontecer para esse investimento fazer sentido? A ideia é começar pelo que resolve o problema principal, sem incluir coisa desnecessária."],
-  ["Estou ocupado / não tenho tempo", "Sem problema. Eu consigo resumir em dois minutos ou deixar uma prévia pronta para você olhar quando puder. Qual horário costuma ser mais tranquilo?"],
+  ["Estou ocupado / não tenho tempo", "Sem problema. Eu consigo resumir em dois minutos ou deixar as informações organizadas para você olhar quando puder. Qual horário costuma ser mais tranquilo?"],
   ["Manda por WhatsApp / e-mail", "Claro. Para eu não mandar algo genérico, me diz só uma coisa: hoje o que mais incomoda na presença digital do negócio? Aí envio algo direto ao ponto."],
   ["Vou pensar / depois retorno", "Perfeito. O que você precisa avaliar para decidir: investimento, prazo, confiança na solução ou conversar com outra pessoa? Assim eu envio exatamente o que ajuda nessa decisão."],
   ["Já tenho quem cuida disso", "Ótimo, isso mostra que vocês valorizam o digital. Minha proposta não é substituir alguém sem necessidade; posso fazer uma análise objetiva e mostrar oportunidades que talvez ainda não estejam sendo trabalhadas."],
-];
-
-const SITE_OBJECTIONS = [
-  ["Já tenho um site", "Perfeito. Então o ponto não é simplesmente ter outro site, e sim avaliar se o atual está rápido, atualizado, fácil de usar no celular e conduzindo o visitante para contato ou compra."],
-  ["Não preciso de site, uso Instagram e WhatsApp", "Instagram e WhatsApp ajudam muito, mas são canais de terceiros. Um site próprio organiza as informações, aparece melhor nas buscas e leva o cliente para o contato sem depender do alcance da rede social."],
-  ["Site não traz cliente para mim", "Um site isolado realmente pode não trazer resultado. Ele precisa estar alinhado à busca local, ter uma oferta clara e facilitar o próximo passo. Posso mostrar como isso funcionaria no seu caso."],
-  ["Já tentei site antes e não funcionou", "Faz sentido ter cautela. O importante é entender por que não funcionou: falta de divulgação, lentidão, texto genérico, ausência de chamada para ação ou dificuldade de atualização."],
-  ["Meu negócio é pequeno, não precisa", "Justamente por ser pequeno, o site pode ser simples e focado. Não precisa de um projeto enorme; basta apresentar bem o negócio, gerar confiança e facilitar o contato."],
 ];
 
 const SALE_STEPS = [
   ["Quebra-gelo e rapport", "Comece perguntando sobre o negócio, tempo de mercado e rotina. O objetivo é criar conexão antes de apresentar qualquer solução."],
   ["Diagnóstico", "Pergunte como os clientes encontram a empresa hoje, quais canais funcionam e onde existe dificuldade."],
   ["Apresentação da solução", "Conecte cada parte da proposta a algo que o cliente relatou. Evite apresentar recursos sem contexto."],
-  ["Demonstração", "Mostre a prévia devagar e explique o caminho que o cliente final faria até entrar em contato ou comprar."],
+  ["Demonstração", "Apresente a solução devagar e explique o caminho que o cliente final faria até entrar em contato ou comprar."],
   ["Pergunta de interesse", "Pergunte o que ele achou e escute sem interromper. A resposta indica se existe interesse ou objeção."],
   ["Oferta", "Apresente escopo, valor, forma de pagamento e prazo somente com dados que você realmente poderá cumprir."],
 ];
@@ -59,13 +50,13 @@ function waLink(lead, message = "") {
 
 function defaultCallScript(lead, profile) {
   const location = [lead.city, lead.location].filter(Boolean).join(" / ");
-  const intro = [profile?.name, profile?.profession].filter(Boolean).join(", ") || "trabalho com desenvolvimento de sites";
+  const intro = [profile?.name, profile?.profession].filter(Boolean).join(", ") || "trabalho com soluções digitais";
   return [
     `ABERTURA\nOlá, falo com a pessoa responsável pela ${lead.name}? Aqui é ${intro}.`,
     `\nCONTEXTO\nEncontrei o perfil da empresa no Google${location ? ` em ${location}` : ""}${lead.googleRating ? ` e vi a avaliação ${lead.googleRating}/5` : ""}.`,
     `\nDIAGNÓSTICO\nHoje vocês usam qual canal como principal para apresentar o negócio e receber novos contatos?`,
-    `\nCONEXÃO\n${lead.problem || `Percebi uma oportunidade de criar uma presença digital mais clara para o nicho de ${lead.segment || "vocês"}.`}`,
-    `\nPRÓXIMO PASSO\nPosso preparar uma prévia visual sem compromisso e mostrar como a ideia poderia ficar. Faz sentido?`,
+    `\nCONEXÃO\n${lead.problem || `Percebi uma oportunidade de melhorar a presença digital do nicho de ${lead.segment || "vocês"}.`}`,
+    `\nPRÓXIMO PASSO\nPosso explicar rapidamente a ideia e entender se faz sentido para vocês?`,
   ].join("\n");
 }
 
@@ -75,11 +66,10 @@ export default function LeadWorkspace({ initialLead, initialWorkspace, initialPr
   const [workspace, setWorkspace] = useState(initialWorkspace);
   const [tab, setTab] = useState("info");
   const [kind, setKind] = useState("initial");
-  const initialMessages = buildProfileMessages(initialLead, initialProfile, initialWorkspace.previewUrl);
+  const initialMessages = buildProfileMessages(initialLead, initialProfile, "");
   const [callScript, setCallScript] = useState(initialWorkspace.callScript || defaultCallScript(initialLead, initialProfile));
   const [whatsappMessage, setWhatsappMessage] = useState(initialWorkspace.whatsappMessage || initialMessages.initial);
   const [instagram, setInstagram] = useState(initialLead.instagram || "");
-  const [previewUrl, setPreviewUrl] = useState(initialWorkspace.previewUrl || "");
   const [proposalValue, setProposalValue] = useState(String(initialLead.proposalValue || ""));
   const [notes, setNotes] = useState(initialLead.notes || "");
   const [appointment, setAppointment] = useState({
@@ -140,10 +130,9 @@ export default function LeadWorkspace({ initialLead, initialWorkspace, initialPr
     try {
       const normalizedInstagram = instagram.trim() || null;
       const updatedLead = await LeadActions.updateLeadAction(lead.id, { instagram: normalizedInstagram });
-      const savedWorkspace = await persistWorkspace({ previewUrl }, "Instagram e link da prévia salvos.");
       setLead(current => ({ ...current, instagram: updatedLead?.instagram ?? normalizedInstagram }));
-      if (savedWorkspace) setPreviewUrl(savedWorkspace.previewUrl || "");
       router.refresh();
+      setNotice("Instagram salvo.");
     } catch (error) {
       setNotice(`Erro: ${error.message}`);
     } finally {
@@ -156,7 +145,7 @@ export default function LeadWorkspace({ initialLead, initialWorkspace, initialPr
     setNotice("");
     try {
       const result = await AIActions.generateLeadMessageAction({
-        lead: { ...lead, instagram, previewUrl },
+        lead: { ...lead, instagram },
         kind: target === "call" ? "call" : kind,
         currentMessage: target === "call" ? callScript : whatsappMessage,
       });
@@ -218,7 +207,7 @@ export default function LeadWorkspace({ initialLead, initialWorkspace, initialPr
 
   function selectMessageKind(value) {
     setKind(value);
-    setWhatsappMessage(buildProfileMessages({ ...lead, instagram }, initialProfile, previewUrl)[value]);
+    setWhatsappMessage(buildProfileMessages({ ...lead, instagram }, initialProfile, "")[value]);
   }
 
   function renderInformation() {
@@ -240,10 +229,9 @@ export default function LeadWorkspace({ initialLead, initialWorkspace, initialPr
       </div>
 
       <div className={s.digitalCard}>
-        <div><h3>Presença digital do cliente</h3><p>Esses dados também serão utilizados pela IA nas mensagens e na criação da prévia.</p></div>
+        <div><h3>Presença digital do cliente</h3><p>O Instagram cadastrado será utilizado pela IA nas mensagens e análises.</p></div>
         <label><span>Instagram do cliente</span><input value={instagram} onChange={event => setInstagram(event.target.value)} placeholder="https://instagram.com/perfil" /></label>
-        <label><span>Link da prévia após o deploy</span><input value={previewUrl} onChange={event => setPreviewUrl(event.target.value)} placeholder="https://previa-cliente.vercel.app" /></label>
-        <div className={s.buttonRow}><button className={s.primary} disabled={busy === "digital"} onClick={saveDigitalData}>{busy === "digital" ? "Salvando..." : "Salvar dados digitais"}</button>{previewUrl && <a href={previewUrl} target="_blank" rel="noopener noreferrer">Abrir prévia ↗</a>}</div>
+        <div className={s.buttonRow}><button className={s.primary} disabled={busy === "digital"} onClick={saveDigitalData}>{busy === "digital" ? "Salvando..." : "Salvar Instagram"}</button></div>
       </div>
     </section>;
   }
@@ -257,7 +245,7 @@ export default function LeadWorkspace({ initialLead, initialWorkspace, initialPr
       </div>
 
       <div className={s.scriptCard}>
-        <div className={s.cardHeading}><div><h3>Mensagem WhatsApp</h3><p>Usa seu Perfil, o Google do cliente, o nicho, o Instagram e a prévia disponível.</p></div>{whatsapp && <a className={s.whatsapp} href={whatsapp} target="_blank" rel="noopener noreferrer">Chamar no WhatsApp</a>}</div>
+        <div className={s.cardHeading}><div><h3>Mensagem WhatsApp</h3><p>Usa seu perfil, os dados do Google, o nicho e o Instagram do cliente.</p></div>{whatsapp && <a className={s.whatsapp} href={whatsapp} target="_blank" rel="noopener noreferrer">Chamar no WhatsApp</a>}</div>
         <div className={s.messageTabs}>{[["initial", "Primeiro contato"], ["followup", "Follow-up"], ["recovery", "Recuperar"]].map(([value, label]) => <button key={value} className={kind === value ? s.activePill : ""} onClick={() => selectMessageKind(value)}>{label}</button>)}</div>
         <textarea value={whatsappMessage} onChange={event => setWhatsappMessage(event.target.value)} />
         <div className={s.buttonRow}><button className={s.primary} disabled={busy === "whatsapp"} onClick={() => generateAI("whatsapp")}>{busy === "whatsapp" ? "Gerando..." : "Gerar com IA"}</button><button onClick={() => persistWorkspace({ whatsappMessage }, "Mensagem salva.")}>Salvar</button><button onClick={() => copy(whatsappMessage, "Mensagem copiada.")}>Copiar</button></div>
@@ -266,21 +254,10 @@ export default function LeadWorkspace({ initialLead, initialWorkspace, initialPr
   }
 
   function renderObjections() {
-    const groups = [["Objeções universais", UNIVERSAL_OBJECTIONS], ["Objeções de site", SITE_OBJECTIONS]];
-    return <section className={s.section}>{groups.map(([title, items]) => <div key={title} className={s.objectionGroup}><h3>{title}</h3>{items.map(([question, answer]) => {
-      const key = `${title}-${question}`;
+    return <section className={s.section}><div className={s.objectionGroup}><h3>Objeções universais</h3>{UNIVERSAL_OBJECTIONS.map(([question, answer]) => {
+      const key = question;
       return <article className={s.objection} key={key}><button onClick={() => setExpanded(expanded === key ? "" : key)}><strong>“{question}”</strong><span>{expanded === key ? "−" : "+"}</span></button>{expanded === key && <div><p>{answer}</p><button onClick={() => copy(answer, "Resposta copiada.")}>Copiar resposta</button></div>}</article>;
-    })}</div>)}</section>;
-  }
-
-  function renderSite() {
-    return <section className={s.section}>
-      <div className={s.sitePanel}>
-        <div><span className={s.siteIcon}>✦</span><h3>{lead.landingStatus === "none" ? "Nenhum site criado ainda" : `Status do projeto: ${lead.landingStatus}`}</h3><p>O Instagram cadastrado será enviado como referência para o criador.</p></div>
-        <a className={s.primaryLink} href={`/criar-site?lead=${lead.id}`}>Abrir no criador de sites</a>
-      </div>
-      <div className={s.scriptCard}><h3>Status da prévia</h3><div className={s.stageButtons}>{[["none", "Não iniciado"], ["todo", "A fazer"], ["done", "Prévia pronta"], ["sent", "Enviada"]].map(([value, label]) => <button key={value} className={lead.landingStatus === value ? s.activePill : ""} onClick={() => mutateLead(() => LeadActions.setLandingAction(lead.id, value), { landingStatus: value }, `Site: ${label}.`)}>{label}</button>)}</div>{previewUrl && <div className={s.currentSite}><span>Prévia publicada</span><a href={previewUrl} target="_blank" rel="noopener noreferrer">{previewUrl}</a></div>}{lead.site && <div className={s.currentSite}><span>Presença atual</span><a href={lead.site} target="_blank" rel="noopener noreferrer">{lead.site}</a></div>}</div>
-    </section>;
+    })}</div></section>;
   }
 
   function renderSale() {
@@ -310,9 +287,8 @@ export default function LeadWorkspace({ initialLead, initialWorkspace, initialPr
   const content = tab === "info" ? renderInformation()
     : tab === "scripts" ? renderScripts()
       : tab === "objections" ? renderObjections()
-        : tab === "site" ? renderSite()
-          : tab === "sale" ? renderSale()
-            : renderSchedule();
+        : tab === "sale" ? renderSale()
+          : renderSchedule();
 
   return <main className={s.page}>
     <div className={s.breadcrumb}><a href="/crm">← CRM</a><span>/</span><strong>{lead.name}</strong></div>
