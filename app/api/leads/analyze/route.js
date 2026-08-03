@@ -105,33 +105,7 @@ export async function POST(request) {
   const prompt = buildPrompt(lead, sources, failures);
   let aiPayload;
   try {
-    const aiResponse = await fetch(`${baseUrl}/chat/completions`, {
-      method: "POST",
-      cache: "no-store",
-      signal: AbortSignal.timeout(120000),
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model,
-        temperature: Number.isFinite(temperature) ? temperature : 0.3,
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content:
-              "Você é um analista de inteligência comercial. Responda somente com JSON válido, sem markdown. Não invente informações e preserve evidências de origem."
-          },
-          { role: "user", content: prompt }
-        ]
-      })
-    });
-
-    aiPayload = await aiResponse.json().catch(() => ({}));
-    if (!aiResponse.ok) {
-      throw new Error(aiPayload?.error?.message || `IA respondeu com status ${aiResponse.status}.`);
-    }
+    aiPayload = await requestDossier({ baseUrl, apiKey, model, temperature, prompt });
   } catch (error) {
     return NextResponse.json(
       { error: `Falha ao consultar a IA: ${error.message}` },
@@ -139,13 +113,15 @@ export async function POST(request) {
     );
   }
 
-  const content = aiPayload?.choices?.[0]?.message?.content || "";
-  let dossier;
-  try {
-    dossier = JSON.parse(stripCodeFence(content));
-  } catch {
+  const rawContent = getAssistantContent(aiPayload);
+  const dossier = parseDossier(rawContent);
+  if (!dossier) {
     return NextResponse.json(
-      { error: "A IA respondeu, mas não retornou um JSON de dossiê válido.", details: content.slice(0, 1000) },
+      {
+        error: "A IA respondeu, mas não retornou um JSON de dossiê válido.",
+        hint: "O OmniRoute pode ter retornado texto antes ou depois do JSON. A resposta foi registrada abaixo para diagnóstico.",
+        details: stringifyForDebug(rawContent).slice(0, 3000)
+      },
       { status: 502 }
     );
   }
@@ -160,16 +136,16 @@ export async function POST(request) {
   const updatedLead = {
     ...lead,
     name: leadName,
-    registration: dossier.registration || lead.registration || "",
-    council: dossier.council || lead.council || "",
+    registration: clean(dossier.registration) || lead.registration || "",
+    council: clean(dossier.council) || lead.council || "",
     email,
     whatsapp,
     phone: clean(dossier.primaryPhone) || firstValue(dossier.phones) || lead.phone || "",
     city,
     state,
-    instagram: dossier.instagram || lead.instagram || "",
-    facebook: dossier.facebook || lead.facebook || "",
-    linkedin: dossier.linkedin || lead.linkedin || "",
+    instagram: clean(dossier.instagram) || lead.instagram || "",
+    facebook: clean(dossier.facebook) || lead.facebook || "",
+    linkedin: clean(dossier.linkedin) || lead.linkedin || "",
     analysisLinks: sourceUrls,
     dossierStatus: "COMPLETED",
     registryStatus: dossier.registration ? "FOUND_ON_WEBSITE" : "NOT_FOUND",
@@ -190,6 +166,112 @@ export async function POST(request) {
   await fs.writeFile(LEADS_FILE, JSON.stringify(leads, null, 2), "utf-8");
 
   return NextResponse.json({ lead: updatedLead, dossier: updatedLead.dossier });
+}
+
+async function requestDossier({ baseUrl, apiKey, model, temperature, prompt }) {
+  const commonBody = {
+    model,
+    temperature: Number.isFinite(temperature) ? temperature : 0.3,
+    messages: [
+      {
+        role: "system",
+        content:
+          "Você é um analista de inteligência comercial. Responda exclusivamente com um objeto JSON válido, sem markdown, comentários ou texto adicional. Não invente informações."
+      },
+      { role: "user", content: prompt }
+    ]
+  };
+
+  let response = await callChat(baseUrl, apiKey, {
+    ...commonBody,
+    response_format: { type: "json_object" }
+  });
+
+  // Alguns modelos roteados não implementam response_format corretamente.
+  // Nesses casos, repetimos sem esse parâmetro para preservar compatibilidade.
+  if (!response.ok && [400, 404, 422].includes(response.status)) {
+    response = await callChat(baseUrl, apiKey, commonBody);
+  }
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.error?.message || `IA respondeu com status ${response.status}.`);
+  }
+  return payload;
+}
+
+function callChat(baseUrl, apiKey, body) {
+  return fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    cache: "no-store",
+    signal: AbortSignal.timeout(120000),
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`
+    },
+    body: JSON.stringify(body)
+  });
+}
+
+function getAssistantContent(payload) {
+  const message = payload?.choices?.[0]?.message;
+  if (!message) return payload;
+
+  if (message.parsed && typeof message.parsed === "object") return message.parsed;
+  if (message.content && typeof message.content === "object") return message.content;
+  if (Array.isArray(message.content)) {
+    return message.content
+      .map((part) => part?.text || part?.content || "")
+      .filter(Boolean)
+      .join("\n");
+  }
+  if (message.tool_calls?.[0]?.function?.arguments) {
+    return message.tool_calls[0].function.arguments;
+  }
+  return message.content || message.reasoning_content || "";
+}
+
+function parseDossier(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value;
+
+  const text = stripCodeFence(String(value || ""));
+  if (!text) return null;
+
+  const candidates = [text, extractFirstJsonObject(text)].filter(Boolean);
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+    } catch {
+      // tenta o próximo formato
+    }
+  }
+  return null;
+}
+
+function extractFirstJsonObject(text) {
+  const start = text.indexOf("{");
+  if (start < 0) return "";
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < text.length; index += 1) {
+    const char = text[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') inString = true;
+    else if (char === "{") depth += 1;
+    else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) return text.slice(start, index + 1);
+    }
+  }
+  return "";
 }
 
 async function resolveFirstModel(baseUrl, apiKey) {
@@ -223,7 +305,7 @@ function buildPrompt(lead, sources, failures) {
     probableCouncil: lead.council,
     niche: lead.specialty,
     previousDossier: lead.dossier || null
-  })}\n\nFONTES ANALISADAS:${sourceText}\n\nFONTES INACESSÍVEIS:\n${JSON.stringify(failures)}\n\nRetorne exatamente um objeto JSON com estas chaves:\n{
+  })}\n\nFONTES ANALISADAS:${sourceText}\n\nFONTES INACESSÍVEIS:\n${JSON.stringify(failures)}\n\nRetorne SOMENTE um objeto JSON válido com estas chaves:\n{
   "leadName": "nome completo do principal profissional ou responsável",
   "primaryEmail": "melhor e-mail de contato",
   "primaryWhatsapp": "WhatsApp com DDD",
@@ -256,7 +338,7 @@ function buildPrompt(lead, sources, failures) {
     "state": { "value": "", "sourceUrl": "", "excerpt": "" }
   },
   "confidence": 0
-}\nNão invente nomes, registros, CNPJ ou contatos. Diferencie telefone comum de WhatsApp apenas quando houver indicação. Prefira contato do profissional/empresa analisada, não de plataformas intermediárias. Use string vazia ou lista vazia quando não encontrar. confidence deve ser de 0 a 1.`;
+}\nNão use blocos markdown. Não escreva explicações antes ou depois do objeto. Não invente nomes, registros, CNPJ ou contatos. Diferencie telefone comum de WhatsApp apenas quando houver indicação. Prefira contato do profissional/empresa analisada, não de plataformas intermediárias. Use string vazia ou lista vazia quando não encontrar. confidence deve ser de 0 a 1.`;
 }
 
 function normalizeLinks(value) {
@@ -294,8 +376,12 @@ function stripCodeFence(value) {
   return String(value || "")
     .trim()
     .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/, "")
+    .replace(/\s*```$/i, "")
     .trim();
+}
+
+function stringifyForDebug(value) {
+  return typeof value === "string" ? value : JSON.stringify(value, null, 2);
 }
 
 function firstValue(value) {
