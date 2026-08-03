@@ -25,13 +25,24 @@ export async function POST(request) {
   }
 
   try {
-    const useInfosimples = shouldUseInfosimples(filters);
+    const council = String(filters.council || "").toUpperCase();
+    const useOfficialCfm = council === "CRM";
+    const useInfosimples = !useOfficialCfm && shouldUseInfosimples(filters);
+
     let results = [];
     let billing = null;
     let sourceUsed = "consultacrm";
     let service = null;
+    let meta = null;
 
-    if (useInfosimples) {
+    if (useOfficialCfm) {
+      const provider = getRegistryProvider("CRM");
+      const response = await provider.search(filters);
+      results = Array.isArray(response) ? response : response.results || [];
+      meta = Array.isArray(response) ? null : response.meta || null;
+      sourceUsed = "cfm-public";
+      service = "portal.cfm.org.br/api/v2/medicos/buscar_medicos";
+    } else if (useInfosimples) {
       const response = await validateWithInfosimples({
         council: filters.council,
         registration: filters.registration,
@@ -44,11 +55,10 @@ export async function POST(request) {
       service = response.service;
       sourceUsed = "infosimples";
     } else {
-      // A InfoSimples é a fonte principal para consultas individualizáveis.
-      // Para descoberta ampla, ela não aceita os parâmetros necessários em
-      // todos os conselhos; nesses casos usamos a ConsultaCRM como fonte auxiliar.
       const provider = getRegistryProvider(filters.council);
-      results = await provider.search(filters);
+      const response = await provider.search(filters);
+      results = Array.isArray(response) ? response : response.results || [];
+      meta = Array.isArray(response) ? null : response.meta || null;
     }
 
     let saved = { added: 0, updated: 0, total: 0 };
@@ -65,7 +75,9 @@ export async function POST(request) {
       sourceUsed,
       service,
       billing,
-      total: results.length,
+      meta,
+      total: meta?.total ?? results.length,
+      returned: results.length,
       saved,
       usage,
       filters
@@ -82,7 +94,7 @@ export async function POST(request) {
       return NextResponse.json(
         {
           error:
-            "Nenhuma das fontes atuais permite filtrar este conselho diretamente por cidade."
+            "A fonte selecionada ainda não permite filtrar este conselho diretamente por cidade."
         },
         { status: 400 }
       );
@@ -114,6 +126,21 @@ export async function POST(request) {
           error: error.message || "A InfoSimples não conseguiu processar a consulta.",
           code: error.code,
           billing: error.billing || null
+        },
+        { status: 502 }
+      );
+    }
+
+    if (
+      error?.code === "CFM_API_ERROR" ||
+      error?.code === "CFM_INVALID_RESPONSE" ||
+      error?.code === "CFM_TIMEOUT"
+    ) {
+      return NextResponse.json(
+        {
+          error: error.message || "O portal oficial do CFM não respondeu à consulta.",
+          code: error.code,
+          details: error.details || null
         },
         { status: 502 }
       );
