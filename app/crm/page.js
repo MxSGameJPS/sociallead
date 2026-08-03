@@ -9,6 +9,8 @@ export default function CrmPage() {
   const [selected, setSelected] = useState(null);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState("");
 
   async function loadLeads() {
     setLoading(true);
@@ -16,12 +18,39 @@ export default function CrmPage() {
       const response = await fetch("/api/leads", { cache: "no-store" });
       const data = await response.json();
       setLeads(data.leads || []);
+      if (selected) {
+        const freshSelected = (data.leads || []).find((lead) => lead.id === selected.id);
+        setSelected(freshSelected || null);
+      }
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => { loadLeads(); }, []);
+
+  async function generateDossier() {
+    if (!selected) return;
+    setAnalyzing(true);
+    setAnalysisError("");
+    try {
+      const response = await fetch("/api/leads/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId: selected.id })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Não foi possível gerar o dossiê.");
+      }
+      setSelected(data.lead);
+      setLeads((current) => current.map((lead) => lead.id === data.lead.id ? data.lead : lead));
+    } catch (error) {
+      setAnalysisError(error?.message || "Não foi possível gerar o dossiê.");
+    } finally {
+      setAnalyzing(false);
+    }
+  }
 
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -52,7 +81,7 @@ export default function CrmPage() {
           {loading ? <p>Carregando CRM...</p> : null}
           {!loading && filtered.length === 0 ? <p>Nenhum lead encontrado.</p> : null}
           {filtered.map((lead) => (
-            <button key={lead.id} className={styles.leadCard} onClick={() => setSelected(lead)}>
+            <button key={lead.id} className={styles.leadCard} onClick={() => { setSelected(lead); setAnalysisError(""); }}>
               <div>
                 <strong>{lead.businessName || lead.name || "Lead sem nome"}</strong>
                 <span>{[lead.specialty, lead.city, lead.state].filter(Boolean).join(" · ") || "Sem localização"}</span>
@@ -85,21 +114,56 @@ export default function CrmPage() {
                 <div><dt>Conselho provável</dt><dd>{selected.council || "Não identificado"}</dd></div>
                 <div><dt>Registro</dt><dd>{selected.registration || "Pendente de localização"}</dd></div>
                 <div><dt>Telefone</dt><dd>{selected.phone || "Não encontrado"}</dd></div>
-                <div><dt>Site</dt><dd>{selected.website ? <a href={selected.website} target="_blank">Abrir site</a> : "Não encontrado"}</dd></div>
+                <div><dt>Site</dt><dd>{selected.website ? <a href={selected.website} target="_blank" rel="noreferrer">Abrir site</a> : "Não encontrado"}</dd></div>
                 <div><dt>Endereço</dt><dd>{selected.formattedAddress || [selected.city, selected.state].filter(Boolean).join(" - ") || "Não encontrado"}</dd></div>
                 <div><dt>Avaliação</dt><dd>{selected.rating ? `${selected.rating} (${selected.reviewCount || 0} avaliações)` : "Sem avaliação"}</dd></div>
-                <div><dt>Google Maps</dt><dd>{selected.googleMapsUrl ? <a href={selected.googleMapsUrl} target="_blank">Abrir perfil</a> : "Não disponível"}</dd></div>
+                <div><dt>Google Maps</dt><dd>{selected.googleMapsUrl ? <a href={selected.googleMapsUrl} target="_blank" rel="noreferrer">Abrir perfil</a> : "Não disponível"}</dd></div>
                 <div><dt>Fonte</dt><dd>{(selected.sources || []).join(", ") || selected.discoveredBy || "Local"}</dd></div>
               </dl>
 
-              <section className={styles.analysis}>
-                <h3>Próxima etapa</h3>
-                <p>O módulo do OmniRoute será conectado aqui para analisar o site, localizar registro profissional, equipe, especialidades e oportunidades comerciais.</p>
-              </section>
+              {selected.dossier ? (
+                <section className={styles.analysis}>
+                  <h3>Análise da IA</h3>
+                  <p>{selected.dossier.summary || "Dossiê concluído."}</p>
+                  <div className={styles.analysisGrid}>
+                    <div><strong>Profissionais</strong><span>{listValue(selected.dossier.professionalNames)}</span></div>
+                    <div><strong>Especialidades</strong><span>{listValue(selected.dossier.specialties)}</span></div>
+                    <div><strong>Serviços</strong><span>{listValue(selected.dossier.services)}</span></div>
+                    <div><strong>E-mails</strong><span>{listValue(selected.dossier.emails)}</span></div>
+                    <div><strong>Equipe</strong><span>{listValue(selected.dossier.teamMembers)}</span></div>
+                    <div><strong>Oportunidades</strong><span>{listValue(selected.dossier.opportunities)}</span></div>
+                    <div><strong>Confiança</strong><span>{formatConfidence(selected.dossier.confidence)}</span></div>
+                  </div>
+                </section>
+              ) : (
+                <section className={styles.analysis}>
+                  <h3>Gerar dossiê com IA</h3>
+                  <p>A configuração da IA apenas conecta o provider. Para analisar este lead, execute o processamento abaixo.</p>
+                  <button
+                    type="button"
+                    className={styles.analyzeButton}
+                    onClick={generateDossier}
+                    disabled={analyzing || !selected.website}
+                  >
+                    {analyzing ? "Analisando site..." : "Analisar site e criar dossiê"}
+                  </button>
+                  {!selected.website ? <p className={styles.warning}>Este lead não possui site para análise.</p> : null}
+                  {analysisError ? <p className={styles.analysisError}>{analysisError}</p> : null}
+                </section>
+              )}
             </>
           )}
         </aside>
       </section>
     </main>
   );
+}
+
+function listValue(value) {
+  return Array.isArray(value) && value.length ? value.join(", ") : "Não encontrado";
+}
+
+function formatConfidence(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? `${Math.round(number * 100)}%` : "Não informado";
 }
