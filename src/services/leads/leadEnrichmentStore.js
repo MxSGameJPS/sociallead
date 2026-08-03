@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 const DIR = path.join(process.cwd(), "data", "lead-enrichment");
+const VALIDATION_TAGS = new Set(["VALIDADO", "FALTA REGISTRO", "FALTA EMAIL", "NÃO VALIDADO"]);
 
 function safeId(value) {
   const id = String(value || "").trim();
@@ -13,8 +14,17 @@ function clean(value, max = 1000) {
   return String(value ?? "").replace(/\u0000/g, "").replace(/\s+/g, " ").trim().slice(0, max);
 }
 
+export function validationTagFor(input = {}) {
+  const hasEmail = Boolean(clean(input.email, 320));
+  const hasRegistration = Boolean(clean(input.registration, 100));
+  if (hasEmail && hasRegistration) return "VALIDADO";
+  if (hasEmail) return "FALTA REGISTRO";
+  if (hasRegistration) return "FALTA EMAIL";
+  return "NÃO VALIDADO";
+}
+
 function normalize(input = {}) {
-  return {
+  const normalized = {
     name: clean(input.name, 180),
     profession: clean(input.profession, 180),
     email: clean(input.email, 320).toLowerCase(),
@@ -38,6 +48,9 @@ function normalize(input = {}) {
     } : {},
     updatedAt: new Date().toISOString(),
   };
+  const requestedTag = clean(input.validationTag, 40).toUpperCase();
+  normalized.validationTag = VALIDATION_TAGS.has(requestedTag) ? requestedTag : validationTagFor(normalized);
+  return normalized;
 }
 
 function fileFor(leadId) {
@@ -57,7 +70,7 @@ export async function getLeadEnrichment(leadId) {
 export async function saveLeadEnrichment(leadId, data = {}) {
   const id = safeId(leadId);
   const current = await getLeadEnrichment(id);
-  const saved = normalize({ ...current, ...data });
+  const saved = normalize({ ...current, ...data, validationTag: validationTagFor({ ...current, ...data }) });
   await fs.mkdir(DIR, { recursive: true });
   const target = fileFor(id);
   const temporary = `${target}.${process.pid}.tmp`;
