@@ -22,6 +22,9 @@ export default async function CRMPage() {
       whatsapp: enrichment.whatsapp || lead.whatsapp || "",
       city: enrichment.city || lead.city || "",
       state: enrichment.state || lead.location || "",
+      validationTag: enrichment.validationTag || "AGUARDANDO ANÁLISE",
+      enrichmentUpdatedAt: enrichment.updatedAt || "",
+      enrichmentConfidence: Number(enrichment.confidence || 0),
     };
   });
 
