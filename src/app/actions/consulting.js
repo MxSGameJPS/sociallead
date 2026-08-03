@@ -22,7 +22,8 @@ function refresh(leadId) {
 }
 
 async function requireLead(leadId) {
-  const id = String(leadId || ""), lead = await repo.getLead(id);
+  const id = String(leadId || "");
+  const lead = await repo.getLead(id);
   if (!lead) throw new Error("Lead não encontrado.");
   return lead;
 }
@@ -50,13 +51,64 @@ function buildLeadContactPatch(lead, enrichment) {
 }
 
 export async function saveConsultingWorkspaceAction(leadId, patch = {}) {
-  const lead = await requireLead(leadId), saved = await saveLeadWorkspace(lead.id, { consulting: patch || {} });
+  const lead = await requireLead(leadId);
+  const saved = await saveLeadWorkspace(lead.id, { consulting: patch || {} });
   refresh(lead.id);
   return saved.consulting;
 }
 
+export async function enrichLeadDataAction(payload = {}) {
+  const lead = await requireLead(payload.leadId);
+  const workspace = await getLeadWorkspace(lead.id);
+  const websiteUrl = clean(payload.websiteUrl || workspace.consulting.websiteUrl || lead.site || "", 1200);
+  const instagramUrl = clean(payload.instagramUrl || workspace.consulting.instagramUrl || lead.instagram || "", 1200);
+  const instagramNotes = clean(payload.instagramNotes || workspace.consulting.instagramNotes || "", 12000);
+
+  if (!websiteUrl && !instagramNotes) {
+    throw new Error("Informe o site ou cole informações públicas para a IA analisar.");
+  }
+
+  const enrichment = await enrichLeadContacts({
+    lead,
+    websiteUrl,
+    instagramUrl,
+    instagramNotes,
+    providerId: payload.providerId || undefined,
+  });
+
+  const leadPatch = buildLeadContactPatch(lead, enrichment);
+  if (Object.keys(leadPatch).length) await repo.updateLead(lead.id, leadPatch);
+
+  const savedWorkspace = await saveLeadWorkspace(lead.id, {
+    consulting: {
+      websiteUrl,
+      instagramUrl,
+      instagramNotes,
+      contactEnrichment: enrichment,
+      council: enrichment.council || "",
+      registration: enrichment.registration || "",
+      lastAnalyzedAt: new Date().toISOString(),
+      status: "ready",
+    },
+  });
+
+  const updatedLead = await repo.getLead(lead.id);
+  refresh(lead.id);
+
+  return {
+    lead: updatedLead || { ...lead, ...leadPatch },
+    enrichment: {
+      ...enrichment,
+      profession: clean(updatedLead?.segment || lead.segment || "", 180),
+    },
+    consulting: savedWorkspace.consulting,
+  };
+}
+
 export async function setCommercialTrackAction(leadId, track) {
-  const lead = await requireLead(leadId), value = validateCommercialTrack(track), saved = await saveLeadWorkspace(lead.id, { commercialTrack: value });
+  const lead = await requireLead(leadId);
+  const value = validateCommercialTrack(track);
+  const saved = await saveLeadWorkspace(lead.id, { commercialTrack: value });
   refresh(lead.id);
   return { commercialTrack: saved.commercialTrack };
 }
@@ -68,14 +120,17 @@ export async function moveConsultingStageAction(leadId, stage, status = "") {
 }
 
 export async function uploadConsultingImagesAction(formData) {
-  const leadId = String(formData?.get?.("leadId") || ""), lead = await requireLead(leadId), assets = await saveUploadedConsultingImages(lead.id, formData.getAll("images"));
+  const leadId = String(formData?.get?.("leadId") || "");
+  const lead = await requireLead(leadId);
+  const assets = await saveUploadedConsultingImages(lead.id, formData.getAll("images"));
   await saveLeadWorkspace(lead.id, { commercialTrack: "consulting" });
   refresh(lead.id);
   return assets;
 }
 
 export async function deleteConsultingImageAction(leadId, assetId) {
-  const lead = await requireLead(leadId), assets = await deleteConsultingAsset(lead.id, assetId);
+  const lead = await requireLead(leadId);
+  const assets = await deleteConsultingAsset(lead.id, assetId);
   refresh(lead.id);
   return assets;
 }
@@ -93,12 +148,16 @@ export async function generateConsultingAuditAction(payload = {}) {
     consulting: { status: "analyzing", stage: "novo", websiteUrl, instagramUrl, instagramNotes, priceCents },
   });
 
-  let websiteAudit = null, screenshotWarning = "";
+  let websiteAudit = null;
+  let screenshotWarning = "";
   if (websiteUrl) {
     try {
       websiteAudit = await auditWebsite(websiteUrl);
-      try { await captureWebsiteScreenshots(lead.id, websiteAudit.url || websiteUrl); }
-      catch (error) { screenshotWarning = `As capturas automáticas não foram atualizadas: ${error.message}`; }
+      try {
+        await captureWebsiteScreenshots(lead.id, websiteAudit.url || websiteUrl);
+      } catch (error) {
+        screenshotWarning = `As capturas automáticas não foram atualizadas: ${error.message}`;
+      }
     } catch (error) {
       websiteAudit = { error: error.message, requestedUrl: websiteUrl };
     }
@@ -106,22 +165,10 @@ export async function generateConsultingAuditAction(payload = {}) {
 
   let contactEnrichment = null;
   try {
-    contactEnrichment = await enrichLeadContacts({
-      lead,
-      websiteUrl,
-      instagramUrl,
-      instagramNotes,
-      providerId: payload.providerId || undefined,
-    });
+    contactEnrichment = await enrichLeadContacts({ lead, websiteUrl, instagramUrl, instagramNotes, providerId: payload.providerId || undefined });
     const leadPatch = buildLeadContactPatch(lead, contactEnrichment);
     if (Object.keys(leadPatch).length) await repo.updateLead(lead.id, leadPatch);
-    await saveLeadWorkspace(lead.id, {
-      consulting: {
-        contactEnrichment,
-        council: contactEnrichment.council || "",
-        registration: contactEnrichment.registration || "",
-      },
-    });
+    await saveLeadWorkspace(lead.id, { consulting: { contactEnrichment, council: contactEnrichment.council || "", registration: contactEnrichment.registration || "" } });
   } catch (error) {
     contactEnrichment = {
       name: lead.name || "",
@@ -142,26 +189,10 @@ export async function generateConsultingAuditAction(payload = {}) {
 
   const refreshedLead = await repo.getLead(lead.id);
   const images = await readConsultingImagesForAI(lead.id);
-  const result = await generateConsultingAudit({
-    lead: refreshedLead || lead,
-    profile,
-    websiteAudit,
-    websiteUrl,
-    instagramUrl,
-    instagramNotes,
-    priceCents,
-    providerId: payload.providerId || undefined,
-    images,
-    screenshotWarning,
-  });
+  const result = await generateConsultingAudit({ lead: refreshedLead || lead, profile, websiteAudit, websiteUrl, instagramUrl, instagramNotes, priceCents, providerId: payload.providerId || undefined, images, screenshotWarning });
 
   refresh(lead.id);
-  return {
-    ...result,
-    contactEnrichment,
-    lead: refreshedLead || lead,
-    assets: await listConsultingAssets(lead.id),
-  };
+  return { ...result, contactEnrichment, lead: refreshedLead || lead, assets: await listConsultingAssets(lead.id) };
 }
 
 export async function promoteConsultingLeadAction(leadId) {
