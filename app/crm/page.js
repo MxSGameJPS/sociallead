@@ -11,6 +11,7 @@ export default function CrmPage() {
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
+  const [extraLinks, setExtraLinks] = useState("");
 
   async function loadLeads() {
     setLoading(true);
@@ -34,10 +35,11 @@ export default function CrmPage() {
     setAnalyzing(true);
     setAnalysisError("");
     try {
+      const links = extraLinks.split(/\n|,/).map((link) => link.trim()).filter(Boolean);
       const response = await fetch("/api/leads/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ leadId: selected.id })
+        body: JSON.stringify({ leadId: selected.id, links })
       });
       const data = await response.json();
       if (!response.ok) {
@@ -45,6 +47,7 @@ export default function CrmPage() {
       }
       setSelected(data.lead);
       setLeads((current) => current.map((lead) => lead.id === data.lead.id ? data.lead : lead));
+      setExtraLinks("");
     } catch (error) {
       setAnalysisError(error?.message || "Não foi possível gerar o dossiê.");
     } finally {
@@ -55,7 +58,7 @@ export default function CrmPage() {
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
     if (!term) return leads;
-    return leads.filter((lead) => [lead.name, lead.businessName, lead.city, lead.state, lead.specialty, lead.council]
+    return leads.filter((lead) => [lead.name, lead.businessName, lead.email, lead.whatsapp, lead.city, lead.state, lead.specialty, lead.council]
       .filter(Boolean).join(" ").toLowerCase().includes(term));
   }, [leads, query]);
 
@@ -72,7 +75,7 @@ export default function CrmPage() {
 
       <section className={styles.toolbar}>
         <strong>{leads.length.toLocaleString("pt-BR")} registros salvos</strong>
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nome, cidade, conselho ou nicho" />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nome, e-mail, WhatsApp, cidade ou nicho" />
         <button onClick={loadLeads}>Atualizar</button>
       </section>
 
@@ -81,13 +84,14 @@ export default function CrmPage() {
           {loading ? <p>Carregando CRM...</p> : null}
           {!loading && filtered.length === 0 ? <p>Nenhum lead encontrado.</p> : null}
           {filtered.map((lead) => (
-            <button key={lead.id} className={styles.leadCard} onClick={() => { setSelected(lead); setAnalysisError(""); }}>
+            <button key={lead.id} className={styles.leadCard} onClick={() => { setSelected(lead); setAnalysisError(""); setExtraLinks(""); }}>
               <div>
-                <strong>{lead.businessName || lead.name || "Lead sem nome"}</strong>
-                <span>{[lead.specialty, lead.city, lead.state].filter(Boolean).join(" · ") || "Sem localização"}</span>
+                <strong>{lead.name || lead.businessName || "Lead sem nome"}</strong>
+                <span>{[lead.email || lead.whatsapp, lead.city, lead.state].filter(Boolean).join(" · ") || "Contato ainda incompleto"}</span>
               </div>
               <div className={styles.tags}>
                 {lead.council ? <span>{lead.council}</span> : null}
+                <span>{lead.contactCompleteness ?? 0}% contato</span>
                 <span>{lead.dossierStatus || "PENDENTE"}</span>
               </div>
             </button>
@@ -105,12 +109,29 @@ export default function CrmPage() {
               <div className={styles.dossierHeader}>
                 <div>
                   <span>DOSSIÊ</span>
-                  <h2>{selected.businessName || selected.name}</h2>
+                  <h2>{selected.name || selected.businessName}</h2>
                 </div>
                 <span className={styles.status}>{selected.dossierStatus || "DISCOVERED"}</span>
               </div>
 
+              <section className={styles.priorityCard}>
+                <div className={styles.priorityHeader}>
+                  <div>
+                    <span>DADOS ESSENCIAIS</span>
+                    <h3>Contato principal do lead</h3>
+                  </div>
+                  <strong>{selected.contactCompleteness ?? calculateLocalCompleteness(selected)}%</strong>
+                </div>
+                <div className={styles.priorityGrid}>
+                  <div><span>Nome do lead</span><strong>{selected.name || "Não encontrado"}</strong></div>
+                  <div><span>E-mail</span><strong>{selected.email || "Não encontrado"}</strong></div>
+                  <div><span>WhatsApp</span><strong>{selected.whatsapp || "Não encontrado"}</strong></div>
+                  <div><span>Cidade/Estado</span><strong>{[selected.city, selected.state].filter(Boolean).join(" / ") || "Não encontrado"}</strong></div>
+                </div>
+              </section>
+
               <dl className={styles.details}>
+                <div><dt>Empresa / estabelecimento</dt><dd>{selected.businessName || "Não identificado"}</dd></div>
                 <div><dt>Conselho provável</dt><dd>{selected.council || "Não identificado"}</dd></div>
                 <div><dt>Registro</dt><dd>{selected.registration || "Pendente de localização"}</dd></div>
                 <div><dt>Telefone</dt><dd>{selected.phone || "Não encontrado"}</dd></div>
@@ -129,28 +150,39 @@ export default function CrmPage() {
                     <div><strong>Profissionais</strong><span>{listValue(selected.dossier.professionalNames)}</span></div>
                     <div><strong>Especialidades</strong><span>{listValue(selected.dossier.specialties)}</span></div>
                     <div><strong>Serviços</strong><span>{listValue(selected.dossier.services)}</span></div>
-                    <div><strong>E-mails</strong><span>{listValue(selected.dossier.emails)}</span></div>
+                    <div><strong>E-mails encontrados</strong><span>{listValue(selected.dossier.emails)}</span></div>
                     <div><strong>Equipe</strong><span>{listValue(selected.dossier.teamMembers)}</span></div>
                     <div><strong>Oportunidades</strong><span>{listValue(selected.dossier.opportunities)}</span></div>
                     <div><strong>Confiança</strong><span>{formatConfidence(selected.dossier.confidence)}</span></div>
+                    <div><strong>Fontes analisadas</strong><span>{listValue(selected.dossier.analyzedSources)}</span></div>
                   </div>
                 </section>
-              ) : (
-                <section className={styles.analysis}>
-                  <h3>Gerar dossiê com IA</h3>
-                  <p>A configuração da IA apenas conecta o provider. Para analisar este lead, execute o processamento abaixo.</p>
-                  <button
-                    type="button"
-                    className={styles.analyzeButton}
-                    onClick={generateDossier}
-                    disabled={analyzing || !selected.website}
-                  >
-                    {analyzing ? "Analisando site..." : "Analisar site e criar dossiê"}
-                  </button>
-                  {!selected.website ? <p className={styles.warning}>Este lead não possui site para análise.</p> : null}
-                  {analysisError ? <p className={styles.analysisError}>{analysisError}</p> : null}
-                </section>
-              )}
+              ) : null}
+
+              <section className={styles.analysisAction}>
+                <h3>{selected.dossier ? "Adicionar fontes e atualizar dossiê" : "Gerar dossiê com IA"}</h3>
+                <p>Cole links públicos adicionais, um por linha: Instagram, Facebook, Link na Bio, página da equipe, perfil profissional ou outra fonte relevante.</p>
+                <textarea
+                  className={styles.linksInput}
+                  value={extraLinks}
+                  onChange={(event) => setExtraLinks(event.target.value)}
+                  placeholder={"https://instagram.com/perfil\nhttps://facebook.com/pagina\nhttps://linktr.ee/perfil"}
+                  disabled={analyzing}
+                />
+                {selected.analysisLinks?.length ? (
+                  <p className={styles.savedLinks}>Links já salvos: {selected.analysisLinks.length}</p>
+                ) : null}
+                <button
+                  type="button"
+                  className={styles.analyzeButton}
+                  onClick={generateDossier}
+                  disabled={analyzing || (!selected.website && !extraLinks.trim())}
+                >
+                  {analyzing ? "Analisando fontes..." : selected.dossier ? "Analisar novos links e atualizar" : "Analisar e criar dossiê"}
+                </button>
+                {!selected.website && !extraLinks.trim() ? <p className={styles.warning}>Este lead não possui site. Adicione ao menos um link público acima.</p> : null}
+                {analysisError ? <p className={styles.analysisError}>{analysisError}</p> : null}
+              </section>
             </>
           )}
         </aside>
@@ -166,4 +198,9 @@ function listValue(value) {
 function formatConfidence(value) {
   const number = Number(value);
   return Number.isFinite(number) ? `${Math.round(number * 100)}%` : "Não informado";
+}
+
+function calculateLocalCompleteness(lead) {
+  const values = [lead.name, lead.email, lead.whatsapp, lead.city && lead.state];
+  return Math.round((values.filter(Boolean).length / values.length) * 100);
 }
