@@ -1,0 +1,31 @@
+{
+  "name": "Daniele C. Ciol",
+  "profession": "Psicóloga",
+  "email": "",
+  "whatsapp": "5515991174209",
+  "phone": "550791103895",
+  "city": "Sorocaba",
+  "state": "SP",
+  "council": "CRP",
+  "registration": "06/169015",
+  "confidence": 70,
+  "evidence": [
+    "Dra Daniele Ciol - Psicóloga CRP 06/169015",
+    "Daniele C. Ciol | Psicóloga Clínica",
+    "Especialista em Terapia Cognitivo Comportamental CRP 06/169015 📍Sorocaba|SP",
+    "End: Rua Cap Luiz Baddini, 181 Jd Santa Rosália Sorocaba/SP"
+  ],
+  "sources": [
+    "https://linktr.ee/daniciol.psico",
+    "https://linktr.ee/features/contact-forms",
+    "https://linktr.ee/s/about/contact"
+  ],
+  "inaccessibleSources": [],
+  "ai": {
+    "used": true,
+    "providerName": "OmniRoute",
+    "model": "meu-combo",
+    "warning": ""
+  },
+  "updatedAt": "2026-08-03T04:40:43.615Z"
+}

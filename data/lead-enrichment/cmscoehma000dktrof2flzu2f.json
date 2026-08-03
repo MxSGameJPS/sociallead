@@ -1,0 +1,35 @@
+{
+  "name": "Graziela Campos",
+  "profession": "Psicóloga Clínica",
+  "email": "",
+  "whatsapp": "5515981193189",
+  "phone": "5515981193189",
+  "city": "Sorocaba",
+  "state": "SP",
+  "council": "CRP",
+  "registration": "06/123213",
+  "confidence": 70,
+  "evidence": [
+    "Dra. Graziela Campos Psicóloga · Sorocaba",
+    "Número de registro: CRP 06/123213",
+    "Avenida Afonso Vergueiro, 1663, Vila Casanova, Sorocaba 18035-370",
+    "phone (15) 98119-3189",
+    "Instagram: psi.grazielacampos Graziela Campos | Psicóloga Clínica Psicólogo CRP 06/123213"
+  ],
+  "sources": [
+    "https://www.doctoralia.com.br/graziela-campos/psicologo/sorocaba",
+    "https://www.doctoralia.com.br/servicos-de-tratamento/consulta-psicologia/sorocaba",
+    "https://www.doctoralia.com.br/servicos-de-tratamento/primeira-consulta-psicologia-2/sorocaba",
+    "https://www.doctoralia.com.br/politica-de-privacidade-para-profissionais-de-saude",
+    "https://www.doctoralia.com.br/contato",
+    "https://www.doctoralia.com.br/especializacoes-medicas"
+  ],
+  "inaccessibleSources": [],
+  "ai": {
+    "used": true,
+    "providerName": "OmniRoute",
+    "model": "meu-combo",
+    "warning": ""
+  },
+  "updatedAt": "2026-08-03T04:43:31.427Z"
+}
