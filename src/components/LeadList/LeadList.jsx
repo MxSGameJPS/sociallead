@@ -30,17 +30,36 @@ const STATES = [
   ["SP", "São Paulo"], ["SE", "Sergipe"], ["TO", "Tocantins"],
 ];
 
-const CATEGORIES = [
-  "Academia", "Advocacia", "Agência de Viagens", "Auto Elétrica", "Auto Peças", "Bar / Botequim",
-  "Barbearia", "Borracharia", "Cafeteria", "Chaveiro", "Clínica Estética", "Clínica Médica",
-  "Contabilidade", "Creche / Escola Infantil", "Cursos / Treinamentos", "Eletricista", "Encanador",
-  "Escola de Idiomas", "Escola Particular", "Farmácia", "Fisioterapia", "Floricultura",
-  "Funilaria e Pintura", "Hamburgueria", "Imobiliária", "Joalheria", "Laboratório de Exames",
-  "Lanchonete", "Lavanderia", "Lava-Rápido", "Loja de Calçados", "Loja de Roupas",
-  "Manicure / Nail Art", "Marcenaria / Móveis", "Marmitaria", "Material de Construção", "Mecânica",
-  "Nutrição", "Odontologia", "Óptica", "Padaria", "Papelaria / Livraria", "Pet Shop",
-  "Pilates / Yoga", "Pintor", "Pizzaria", "Psicologia", "Pousada / Hotel", "Restaurante",
-  "Salão de Beleza", "Seguradora", "Sorveteria", "Supermercado", "Veterinária",
+const PROFESSIONS = [
+  { query: "Administrador", label: "Administradores", council: "CRA" },
+  { query: "Advogado", label: "Advogados", council: "OAB" },
+  { query: "Arquiteto", label: "Arquitetos e Urbanistas", council: "CAU" },
+  { query: "Assistente Social", label: "Assistentes Sociais", council: "CRESS" },
+  { query: "Biólogo", label: "Biólogos", council: "CRBio" },
+  { query: "Biomédico", label: "Biomédicos", council: "CRBM" },
+  { query: "Contador", label: "Contadores", council: "CRC" },
+  { query: "Corretor de Imóveis", label: "Corretores de Imóveis", council: "CRECI" },
+  { query: "Dentista", label: "Dentistas", council: "CRO" },
+  { query: "Economista", label: "Economistas", council: "CORECON" },
+  { query: "Enfermeiro", label: "Enfermeiros", council: "COREN" },
+  { query: "Engenheiro Agrônomo", label: "Engenheiros Agrônomos", council: "CREA" },
+  { query: "Engenheiro Civil", label: "Engenheiros Civis", council: "CREA" },
+  { query: "Engenheiro Eletricista", label: "Engenheiros Eletricistas", council: "CREA" },
+  { query: "Engenheiro Mecânico", label: "Engenheiros Mecânicos", council: "CREA" },
+  { query: "Engenheiro de Produção", label: "Engenheiros de Produção", council: "CREA" },
+  { query: "Farmacêutico", label: "Farmacêuticos", council: "CRF" },
+  { query: "Fisioterapeuta", label: "Fisioterapeutas", council: "CREFITO" },
+  { query: "Fonoaudiólogo", label: "Fonoaudiólogos", council: "CREFONO" },
+  { query: "Médico", label: "Médicos", council: "CRM" },
+  { query: "Médico Veterinário", label: "Médicos Veterinários", council: "CRMV" },
+  { query: "Nutricionista", label: "Nutricionistas", council: "CRN" },
+  { query: "Profissional de Educação Física", label: "Profissionais de Educação Física", council: "CREF" },
+  { query: "Psicólogo", label: "Psicólogos", council: "CRP" },
+  { query: "Químico", label: "Químicos", council: "CRQ" },
+  { query: "Técnico Agrícola", label: "Técnicos Agrícolas", council: "CFTA" },
+  { query: "Técnico em Enfermagem", label: "Técnicos em Enfermagem", council: "COREN" },
+  { query: "Técnico Industrial", label: "Técnicos Industriais", council: "CFT" },
+  { query: "Terapeuta Ocupacional", label: "Terapeutas Ocupacionais", council: "CREFITO" },
 ];
 
 function whatsappLink(phone) {
@@ -91,7 +110,7 @@ export default function LeadList({ initialLeads = [] }) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
 
-  const [filters, setFilters] = useState({ country: "BR", state: "RS", city: "", neighborhood: "", category: "Restaurante", count: 20 });
+  const [filters, setFilters] = useState({ country: "BR", state: "RS", city: "", neighborhood: "", category: "Médico", count: 20 });
   const [cities, setCities] = useState([]);
   const [loadingCities, setLoadingCities] = useState(true);
   const [citiesError, setCitiesError] = useState("");
@@ -180,7 +199,7 @@ export default function LeadList({ initialLeads = [] }) {
     try {
       const result = await searchPlacesAction(filters);
       setPlaces(result.results || []);
-      setPlacesNotice(`${result.count} estabelecimentos encontrados para “${result.query}”.`);
+      setPlacesNotice(`${result.count} profissionais encontrados para “${result.query}”.`);
     } catch (error) {
       setPlaces([]);
       setPlacesNotice("Erro na busca: " + error.message);
@@ -266,7 +285,7 @@ export default function LeadList({ initialLeads = [] }) {
 
   return <main className={s.page}>
     <header className={s.header}>
-      <div><h1>Buscar Leads</h1><p>Encontre empresas automaticamente no Google Places, exporte os resultados e envie as oportunidades para o CRM.</p></div>
+      <div><h1>Buscar Profissionais</h1><p>Encontre profissionais regulamentados no Google Places, exporte os resultados e envie as oportunidades para o CRM.</p></div>
       <div className={s.actions}>
         <a href="/crm">Abrir CRM</a>
         <label className={s.secondary}>{busy ? "Importando…" : "Importar CSV/JSON"}<input type="file" accept=".csv,.json" hidden disabled={busy} onChange={importFile} /></label>
@@ -283,11 +302,11 @@ export default function LeadList({ initialLeads = [] }) {
           ? <select required disabled={cityDisabled} value={filters.city} onChange={event => updateFilter("city", event.target.value)}><option value="">{loadingCities ? "Carregando cidades…" : citiesError ? "Falha ao carregar cidades" : "Selecione a cidade"}</option>{cities.map(city => <option key={city} value={city}>{city}</option>)}</select>
           : <input required value={filters.city} onChange={event => updateFilter("city", event.target.value)} placeholder="Informe a cidade" />}</label>
         <label><span>Bairro opcional</span><input value={filters.neighborhood} onChange={event => updateFilter("neighborhood", event.target.value)} placeholder="Ex.: Centro" /></label>
-        <label><span>Nicho</span><select value={filters.category} onChange={event => updateFilter("category", event.target.value)}>{CATEGORIES.map(item => <option key={item} value={item}>{item}</option>)}</select></label>
+        <label><span>Profissão</span><select value={filters.category} onChange={event => updateFilter("category", event.target.value)}>{PROFESSIONS.map(item => <option key={item.query} value={item.query}>{item.label} — {item.council}</option>)}</select></label>
         <button className={s.searchButton} type="submit" disabled={searching || !filters.city.trim() || cityDisabled}>{searching ? "Buscando…" : "Buscar"}</button>
       </form>
       {citiesError && filters.country === "BR" && <div className={s.cityError}>Não foi possível carregar as cidades pelo IBGE: {citiesError}</div>}
-      <div className={s.quantityRow}><span>Quantidade</span>{[20, 40, 60].map(value => <button type="button" key={value} className={filters.count === value ? s.quantityActive : ""} onClick={() => updateFilter("count", value)}>{value}</button>)}<small>Cidades do Brasil: API pública do IBGE · Leads: Google Places.</small></div>
+      <div className={s.quantityRow}><span>Quantidade</span>{[20, 40, 60].map(value => <button type="button" key={value} className={filters.count === value ? s.quantityActive : ""} onClick={() => updateFilter("count", value)}>{value}</button>)}<small>Cidades do Brasil: API pública do IBGE · Profissionais: Google Places.</small></div>
     </section>
 
     {placesNotice && <div className={placesNotice.startsWith("Erro") ? s.error : s.notice}>{placesNotice}</div>}
@@ -308,7 +327,7 @@ export default function LeadList({ initialLeads = [] }) {
     {notice && <div className={notice.startsWith("Erro") ? s.error : s.notice}>{notice}</div>}
     {counts.total > 0 && counts.whatsapp === 0 && <div className={s.warning}><strong>A base ainda não possui WhatsApp confirmado.</strong><span>A busca automática traz telefone do Google. Celulares são marcados como possível WhatsApp, mas só entram como confirmados depois da sua validação.</span></div>}
 
-    <section className={s.baseHeader}><div><h2>Base local</h2><p>Leads já salvos no SQLite, incluindo importações e resultados enviados da busca.</p></div></section>
+    <section className={s.baseHeader}><div><h2>Base local</h2><p>Profissionais já salvos no SQLite, incluindo importações e resultados enviados da busca.</p></div></section>
     <section className={s.stats}>
       <div><span>Total</span><strong>{counts.total}</strong></div>
       <div><span>WhatsApp confirmado</span><strong>{counts.whatsapp}</strong></div>
@@ -319,7 +338,7 @@ export default function LeadList({ initialLeads = [] }) {
 
     <section className={s.panel}>
       <div className={s.filters}>
-        <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar empresa, segmento, cidade…" />
+        <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar profissional, profissão, cidade…" />
         <select value={contact} onChange={event => setContact(event.target.value)}><option value="all">Todos os contatos</option><option value="whatsapp">Com WhatsApp confirmado</option><option value="no-contact">Sem contato</option><option value="no-site">Sem site próprio</option></select>
         <select value={grade} onChange={event => setGrade(event.target.value)}><option value="all">Todas as notas</option>{["A", "B", "C", "D"].map(item => <option key={item} value={item}>Nota {item}</option>)}</select>
         <span>{visible.length} exibidos</span>
@@ -327,10 +346,10 @@ export default function LeadList({ initialLeads = [] }) {
 
       <div className={s.tableWrap}>
         <table>
-          <thead><tr><th>Empresa</th><th>Local / segmento</th><th>Qualificação</th><th>Contato</th><th>Presença digital</th><th>Etapa</th><th /></tr></thead>
+          <thead><tr><th>Profissional</th><th>Local / profissão</th><th>Qualificação</th><th>Contato</th><th>Presença digital</th><th>Etapa</th><th /></tr></thead>
           <tbody>{visible.map(lead => <tr key={lead.id}>
             <td><strong>{lead.name}</strong><small>{lead.source || "Importação"}</small></td>
-            <td><span>{lead.city || lead.location || "Não informado"}</span><small>{lead.segment || "Sem segmento"}</small></td>
+            <td><span>{lead.city || lead.location || "Não informado"}</span><small>{lead.segment || "Profissão não informada"}</small></td>
             <td><span className={`${s.grade} ${s["grade" + lead.grade]}`}>{lead.grade}</span><b className={s.score}>{lead.score}</b></td>
             <td>{lead.whatsapp ? <><b>{lead.whatsapp}</b><small>WhatsApp confirmado</small></> : lead.phone ? <><b>{lead.phone}</b><small>Telefone</small></> : <span className={s.missing}>Não encontrado</span>}</td>
             <td>{lead.site ? <><a href={/^https?:/.test(lead.site) ? lead.site : "http://" + lead.site} target="_blank" rel="noopener noreferrer">Abrir presença</a><small>{lead.weakSite ? "Presença de terceiros ou fraca" : "Site próprio"}</small></> : lead.instagram ? <a href={lead.instagram} target="_blank" rel="noopener noreferrer">Instagram</a> : <span className={s.missing}>Sem site/rede</span>}</td>
@@ -338,7 +357,7 @@ export default function LeadList({ initialLeads = [] }) {
             <td><div className={s.rowActions}>{lead.mapsLink && <a href={lead.mapsLink} target="_blank" rel="noopener noreferrer">Maps</a>}<a href="/crm">CRM</a></div></td>
           </tr>)}</tbody>
         </table>
-        {!visible.length && <div className={s.empty}>{counts.total ? "Nenhum lead corresponde aos filtros." : "Faça uma busca automática ou importe um CSV para começar."}</div>}
+        {!visible.length && <div className={s.empty}>{counts.total ? "Nenhum profissional corresponde aos filtros." : "Faça uma busca automática ou importe um CSV para começar."}</div>}
       </div>
     </section>
   </main>;
