@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import styles from "./page.module.css";
 import Header from "../../components/dashboard/Header/Header.js";
+import BaseStats from "../../components/dashboard/BaseStats/BaseStats.js";
 import SearchForm from "../../components/search/SearchForm/SearchForm.js";
 import JsonImport from "../../components/search/JsonImport/JsonImport.js";
 import ResultsTable from "../../components/search/ResultsTable/ResultsTable.js";
@@ -16,6 +17,30 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [searched, setSearched] = useState(false);
+  const [stats, setStats] = useState(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [statsError, setStatsError] = useState("");
+
+  const loadStats = useCallback(async () => {
+    setStatsLoading(true);
+    setStatsError("");
+    try {
+      const response = await fetch("/api/leads/stats", { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Não foi possível carregar a base local.");
+      }
+      setStats(data);
+    } catch (err) {
+      setStatsError(err?.message || "Não foi possível carregar a base local.");
+    } finally {
+      setStatsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadStats();
+  }, [loadStats]);
 
   async function handleSearch(formData) {
     setLoading(true);
@@ -34,6 +59,7 @@ export default function DashboardPage() {
         setPendingIntegration(Boolean(data.pendingIntegration));
         setFilters(data.filters || formData);
         setSearched(true);
+        await loadStats();
       } else {
         setResults([]);
         setError(data.error || "Não foi possível consultar este conselho agora.");
@@ -48,7 +74,7 @@ export default function DashboardPage() {
     }
   }
 
-  function handleImported(data) {
+  async function handleImported(data) {
     setResults(data.results || []);
     setIsMock(false);
     setPendingIntegration(false);
@@ -56,6 +82,7 @@ export default function DashboardPage() {
     setSelectedIds(new Set());
     setError(null);
     setSearched(true);
+    await loadStats();
   }
 
   function toggle(id) {
@@ -82,6 +109,7 @@ export default function DashboardPage() {
         subtitle="Consulte registros, importe respostas oficiais e exporte em CSV."
       />
       <div className={styles.content}>
+        <BaseStats stats={stats} loading={statsLoading} error={statsError} />
         <JsonImport onImported={handleImported} disabled={loading} />
         <SearchForm onSearch={handleSearch} loading={loading} />
 
