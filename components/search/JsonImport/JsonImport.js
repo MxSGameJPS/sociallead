@@ -16,7 +16,10 @@ export default function JsonImport({ onImported, disabled }) {
     if (!open) return undefined;
 
     function handleKeyDown(event) {
-      if (event.key === "Escape" && !loading) closeModal();
+      if (event.key === "Escape" && !loading) {
+        setOpen(false);
+        setError("");
+      }
     }
 
     window.addEventListener("keydown", handleKeyDown);
@@ -86,7 +89,7 @@ export default function JsonImport({ onImported, disabled }) {
   }
 
   return (
-    <>
+    <div>
       <section className={styles.card} aria-labelledby="json-import-title">
         <div>
           <h2 id="json-import-title" className={styles.title}>Importar JSON do CFM</h2>
@@ -107,7 +110,7 @@ export default function JsonImport({ onImported, disabled }) {
         {message ? <p className={styles.success}>{message}</p> : null}
       </section>
 
-      {open ? (
+      {open && (
         <div className={styles.overlay} role="presentation" onMouseDown={closeModal}>
           <section
             className={styles.modal}
@@ -140,7 +143,6 @@ export default function JsonImport({ onImported, disabled }) {
               onChange={(event) => setJsonText(event.target.value)}
               placeholder={'{\n  "status": "sucesso",\n  "dados": [ ... ]\n}'}
               spellCheck="false"
-              autoFocus
               disabled={loading}
             />
 
@@ -170,7 +172,7 @@ export default function JsonImport({ onImported, disabled }) {
             </div>
           </section>
         </div>
-      ) : null}
-    </>
+      )}
+    </div>
   );
 }
