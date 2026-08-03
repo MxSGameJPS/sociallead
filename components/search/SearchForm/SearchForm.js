@@ -16,14 +16,22 @@ const INITIAL = {
 
 export default function SearchForm({ onSearch, loading }) {
   const [form, setForm] = useState(INITIAL);
+  const [localError, setLocalError] = useState("");
 
   function update(field, value) {
+    setLocalError("");
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
   function handleSubmit(e) {
     e.preventDefault();
-    onSearch(form);
+
+    if (!form.name.trim() && !form.registration.trim() && !form.specialty.trim()) {
+      setLocalError("Informe o nome, número do registro ou especialidade.");
+      return;
+    }
+
+    onSearch({ ...form, city: "" });
   }
 
   return (
@@ -68,10 +76,10 @@ export default function SearchForm({ onSearch, loading }) {
           <input
             className={styles.input}
             type="text"
-            value={form.city}
-            maxLength={120}
-            placeholder="Ex.: Porto Alegre"
-            onChange={(e) => update("city", e.target.value)}
+            value=""
+            placeholder="Não suportado pela ConsultaCRM"
+            disabled
+            title="A fonte ConsultaCRM não oferece filtro por cidade."
           />
         </div>
 
@@ -126,6 +134,8 @@ export default function SearchForm({ onSearch, loading }) {
           </select>
         </div>
       </div>
+
+      {localError ? <p role="alert">{localError}</p> : null}
 
       <div className={styles.actions}>
         <button className={styles.submit} type="submit" disabled={loading}>
