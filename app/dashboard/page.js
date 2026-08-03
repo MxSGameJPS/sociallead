@@ -4,6 +4,7 @@ import { useState } from "react";
 import styles from "./page.module.css";
 import Header from "../../components/dashboard/Header/Header.js";
 import SearchForm from "../../components/search/SearchForm/SearchForm.js";
+import JsonImport from "../../components/search/JsonImport/JsonImport.js";
 import ResultsTable from "../../components/search/ResultsTable/ResultsTable.js";
 
 export default function DashboardPage() {
@@ -38,13 +39,23 @@ export default function DashboardPage() {
         setError(data.error || "Não foi possível consultar este conselho agora.");
         setSearched(true);
       }
-    } catch (err) {
+    } catch {
       setResults([]);
       setError("Não foi possível consultar este conselho agora.");
       setSearched(true);
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleImported(data) {
+    setResults(data.results || []);
+    setIsMock(false);
+    setPendingIntegration(false);
+    setFilters({ council: "CRM", source: "cfm-json-import" });
+    setSelectedIds(new Set());
+    setError(null);
+    setSearched(true);
   }
 
   function toggle(id) {
@@ -68,9 +79,10 @@ export default function DashboardPage() {
     <>
       <Header
         title="Buscador de Registros Profissionais"
-        subtitle="Consulte registros, selecione leads e exporte em CSV."
+        subtitle="Consulte registros, importe respostas oficiais e exporte em CSV."
       />
       <div className={styles.content}>
+        <JsonImport onImported={handleImported} disabled={loading} />
         <SearchForm onSearch={handleSearch} loading={loading} />
 
         {loading ? (
