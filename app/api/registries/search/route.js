@@ -46,7 +46,17 @@ export async function POST(request) {
   } catch (error) {
     if (error?.code === "MISSING_QUERY") {
       return NextResponse.json(
-        { error: "Informe uma UF, nome, registro ou especialidade." },
+        { error: "Informe o nome, número do registro ou especialidade." },
+        { status: 400 }
+      );
+    }
+
+    if (error?.code === "UNSUPPORTED_CITY_FILTER") {
+      return NextResponse.json(
+        {
+          error:
+            "A fonte ConsultaCRM não permite filtrar por cidade. Use UF e nome, registro ou especialidade."
+        },
         { status: 400 }
       );
     }
