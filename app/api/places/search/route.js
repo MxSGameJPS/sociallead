@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { searchGooglePlaces } from "../../../../lib/places/google-places-provider.js";
-import { saveLeads } from "../../../../lib/leads/storage.js";
 
 export async function POST(request) {
   let body;
@@ -18,13 +17,10 @@ export async function POST(request) {
       limit: Number(body.limit) || 20
     });
 
-    const saved = await saveLeads(response.records, "google-places");
-
     return NextResponse.json({
       results: response.records,
       sourceUsed: "google-places",
       total: response.records.length,
-      saved,
       nextPageToken: response.nextPageToken,
       textQuery: response.textQuery
     });
