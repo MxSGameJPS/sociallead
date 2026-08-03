@@ -1,10 +1,11 @@
 import { generateWithDefaultProvider, generateWithProvider } from "../ai/providerService.js";
+import { renderWebsiteContent } from "./screenshotService.js";
 import { assertPublicWebsiteUrl, normalizeWebsiteUrl } from "./siteAuditService.js";
 
 const REQUEST_TIMEOUT_MS = 15000;
 const MAX_HTML_BYTES = 1200000;
 const MAX_PAGES = 6;
-const INTERNAL_PATH_HINTS = /(contato|contact|sobre|quem-somos|equipe|profissionais|servicos|serviços|atendimento)/i;
+const INTERNAL_PATH_HINTS = /(contato|contact|sobre|quem-somos|equipe|profissionais|servicos|serviços|atendimento|especialidades|especializacoes|especializações)/i;
 const FILE_EMAIL_ENDINGS = /\.(?:png|jpe?g|gif|webp|svg|css|js|woff2?|ttf|ico|pdf)$/i;
 const PLACEHOLDER_EMAILS = /^(?:seu|email|teste|exemplo|contato)@(?:email|exemplo|teste)\./i;
 
@@ -40,7 +41,7 @@ function normalizeEmail(value) {
 function normalizePhone(value) {
   let digits = String(value || "").replace(/\D/g, "");
   if (digits.startsWith("00")) digits = digits.slice(2);
-  if (digits.startsWith("55") && digits.length >= 12) return digits.slice(0, 13);
+  if (digits.startsWith("55") && digits.length >= 12 && digits.length <= 13) return digits;
   if (digits.length === 10 || digits.length === 11) return `55${digits}`;
   return "";
 }
@@ -74,9 +75,25 @@ function extractRegistration(text) {
   return { council: "", registration: "" };
 }
 
-function extractDeterministic(html, pageUrl) {
+function inferProfession(text) {
+  const candidates = [
+    [/(advogada?|escritório de advocacia|direito\b)/i, "Advogada"],
+    [/(médica?|medicina|crm\b)/i, "Médica"],
+    [/(dentista|odontóloga?|odontologia|cro\b)/i, "Dentista"],
+    [/(psicóloga?|psicologia|crp\b)/i, "Psicóloga"],
+    [/(engenheira?|engenharia|crea\b)/i, "Engenheira"],
+    [/(arquiteta?|arquitetura|cau\b)/i, "Arquiteta"],
+    [/(contadora?|contabilidade|crc\b)/i, "Contadora"],
+    [/(fisioterapeuta|fisioterapia|crefito\b)/i, "Fisioterapeuta"],
+    [/(enfermeira?|enfermagem|coren\b)/i, "Enfermeira"],
+    [/(nutricionista|nutrição|nutricao|crn\b)/i, "Nutricionista"],
+  ];
+  return candidates.find(([pattern]) => pattern.test(text))?.[1] || "";
+}
+
+function extractDeterministic(html, pageUrl, suppliedVisibleText = "") {
   const source = String(html || "");
-  const visibleText = stripHtml(source);
+  const visibleText = clean(suppliedVisibleText || stripHtml(source), 250000);
   const emails = [];
   for (const match of source.matchAll(/mailto:([^"'<>\s]+)/gi)) emails.push(normalizeEmail(match[1]));
   for (const match of visibleText.matchAll(/[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)) emails.push(normalizeEmail(match[0]));
@@ -91,16 +108,17 @@ function extractDeterministic(html, pageUrl) {
   for (const match of source.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>/gi)) {
     try {
       const url = new URL(match[1], pageUrl);
-      if (url.origin === new URL(pageUrl).origin && INTERNAL_PATH_HINTS.test(url.pathname)) links.push(url.toString());
+      if (url.origin === new URL(pageUrl).origin && INTERNAL_PATH_HINTS.test(`${url.pathname}${url.hash}`)) links.push(url.toString());
     } catch {}
   }
 
   return {
-    text: visibleText.slice(0, 35000),
+    text: visibleText.slice(0, 50000),
     emails: unique(emails, 12),
     whatsapp: unique(whatsapp, 8),
     phones: unique(phones, 12),
     registrations: [extractRegistration(visibleText)].filter(item => item.registration),
+    profession: inferProfession(visibleText),
     links: unique(links, 12),
   };
 }
@@ -114,7 +132,7 @@ async function fetchHtml(urlInput) {
       redirect: "follow",
       cache: "no-store",
       signal: controller.signal,
-      headers: { "user-agent": "LeadFlow/3.0 (+contact enrichment)", accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1" },
+      headers: { "user-agent": "LeadFlow/3.1 (+contact enrichment)", accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1" },
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const type = response.headers.get("content-type") || "";
@@ -126,6 +144,38 @@ async function fetchHtml(urlInput) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function needsBrowserRendering(extracted) {
+  return extracted.text.length < 1000 || (!extracted.emails.length && !extracted.registrations.length);
+}
+
+async function extractPage(urlInput, allowBrowser = false) {
+  const page = await fetchHtml(urlInput);
+  let extracted = extractDeterministic(page.html, page.url);
+  let rendered = false;
+
+  if (allowBrowser && needsBrowserRendering(extracted)) {
+    try {
+      const browserPage = await renderWebsiteContent(urlInput);
+      const renderedExtraction = extractDeterministic(browserPage.html, browserPage.url, browserPage.visibleText);
+      extracted = {
+        text: renderedExtraction.text.length > extracted.text.length ? renderedExtraction.text : extracted.text,
+        emails: unique([...renderedExtraction.emails, ...extracted.emails], 12),
+        whatsapp: unique([...renderedExtraction.whatsapp, ...extracted.whatsapp], 8),
+        phones: unique([...renderedExtraction.phones, ...extracted.phones], 12),
+        registrations: unique([...renderedExtraction.registrations, ...extracted.registrations].map(item => JSON.stringify(item)), 8).map(item => JSON.parse(item)),
+        profession: renderedExtraction.profession || extracted.profession,
+        links: unique([...renderedExtraction.links, ...extracted.links], 12),
+      };
+      page.url = browserPage.url || page.url;
+      rendered = true;
+    } catch (error) {
+      extracted.renderWarning = clean(error.message, 500);
+    }
+  }
+
+  return { url: page.url, ...extracted, rendered };
 }
 
 function parseAiJson(raw) {
@@ -156,10 +206,10 @@ export async function enrichLeadContacts({ lead = {}, websiteUrl = "", instagram
     if (visited.has(normalized)) continue;
     visited.add(normalized);
     try {
-      const page = await fetchHtml(normalized);
-      const extracted = extractDeterministic(page.html, page.url);
-      pages.push({ url: page.url, ...extracted });
-      for (const link of extracted.links) if (!visited.has(link) && queued.length + pages.length < MAX_PAGES * 2) queued.push(link);
+      const page = await extractPage(target, pages.length === 0);
+      pages.push(page);
+      if (page.renderWarning) errors.push({ url: page.url, error: `Renderização dinâmica: ${page.renderWarning}` });
+      for (const link of page.links) if (!visited.has(link) && queued.length + pages.length < MAX_PAGES * 2) queued.push(link);
     } catch (error) {
       errors.push({ url: normalized, error: clean(error.message, 300) });
     }
@@ -169,21 +219,22 @@ export async function enrichLeadContacts({ lead = {}, websiteUrl = "", instagram
   const deterministicWhatsapp = pages.flatMap(page => page.whatsapp);
   const deterministicPhones = pages.flatMap(page => page.phones);
   const deterministicRegistrations = pages.flatMap(page => page.registrations);
-  const context = pages.map(page => `FONTE: ${page.url}\n${page.text}`).join("\n\n").slice(0, 70000);
+  const deterministicProfession = pages.map(page => page.profession).find(Boolean) || "";
+  const context = pages.map(page => `FONTE: ${page.url}${page.rendered ? " (conteúdo renderizado no navegador)" : ""}\n${page.text}`).join("\n\n").slice(0, 90000);
 
   let ai = {};
   let aiMeta = { used: false, providerName: "", model: "", warning: "" };
   if (context || instagramNotes) {
     try {
       const request = {
-        systemPrompt: "Você extrai dados comerciais de fontes públicas. Use apenas fatos presentes no conteúdo. Não invente. Responda somente JSON válido.",
+        systemPrompt: "Você extrai dados profissionais e comerciais de fontes públicas. Use apenas fatos presentes no conteúdo. Não invente. Responda somente JSON válido.",
         prompt: [
           "Localize os dados essenciais do lead e um registro profissional quando houver prova explícita.",
-          "Prioridade: nome, email, whatsapp, cidade, estado. Registro profissional é complementar.",
+          "Prioridade: nome, profissão, email, whatsapp, cidade e estado. Registro profissional é complementar.",
           "Retorne exatamente este objeto:",
-          '{"name":"","email":"","whatsapp":"","city":"","state":"","council":"","registration":"","confidence":0,"evidence":[]}',
+          '{"name":"","profession":"","email":"","whatsapp":"","city":"","state":"","council":"","registration":"","confidence":0,"evidence":[]}',
           "Regras: WhatsApp apenas números com DDI; estado com 2 letras; não use email de imagem/arquivo; não presuma registro; evidence deve conter trechos curtos das fontes.",
-          `LEAD ATUAL: ${JSON.stringify({ name: lead.name, email: lead.email, whatsapp: lead.whatsapp, phone: lead.phone, city: lead.city, state: lead.location, address: lead.address })}`,
+          `LEAD ATUAL: ${JSON.stringify({ name: lead.name, profession: lead.segment, email: lead.email, whatsapp: lead.whatsapp, phone: lead.phone, city: lead.city, state: lead.location, address: lead.address })}`,
           `SITE/OUTRAS PÁGINAS:\n${context}`,
           `INSTAGRAM: ${instagramUrl}\nOBSERVAÇÕES: ${clean(instagramNotes, 12000)}`,
         ].join("\n\n"),
@@ -205,6 +256,7 @@ export async function enrichLeadContacts({ lead = {}, websiteUrl = "", instagram
 
   return {
     name: clean(ai.name, 180) || clean(lead.name, 180),
+    profession: clean(ai.profession, 180) || deterministicProfession || clean(lead.segment, 180),
     email,
     whatsapp,
     phone,
@@ -216,11 +268,13 @@ export async function enrichLeadContacts({ lead = {}, websiteUrl = "", instagram
     evidence: Array.isArray(ai.evidence) ? ai.evidence.map(item => clean(item, 300)).filter(Boolean).slice(0, 10) : [],
     sources: pages.map(page => page.url),
     inaccessibleSources: errors,
+    renderedSources: pages.filter(page => page.rendered).map(page => page.url),
     deterministic: {
       emails: unique(deterministicEmails, 12),
       whatsapp: unique(deterministicWhatsapp, 8),
       phones: unique(deterministicPhones, 12),
       registrations: deterministicRegistrations,
+      profession: deterministicProfession,
     },
     ai: aiMeta,
   };
