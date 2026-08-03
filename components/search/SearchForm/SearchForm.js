@@ -14,25 +14,25 @@ const INITIAL = {
   limit: 20
 };
 
+const INFOSIMPLES_COUNCILS = new Set(["CRM", "CRO", "CRP", "CRMV", "CRC", "CRF"]);
+
 export default function SearchForm({ onSearch, loading }) {
   const [form, setForm] = useState(INITIAL);
-  const [localError, setLocalError] = useState("");
 
   function update(field, value) {
-    setLocalError("");
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
   function handleSubmit(e) {
     e.preventDefault();
-
-    if (!form.name.trim() && !form.registration.trim() && !form.specialty.trim()) {
-      setLocalError("Informe o nome, número do registro ou especialidade.");
-      return;
-    }
-
     onSearch({ ...form, city: "" });
   }
+
+  const hasIndividualQuery = Boolean(form.name.trim() || form.registration.trim());
+  const infosimplesSupported = INFOSIMPLES_COUNCILS.has(form.council);
+  const sourceMessage = infosimplesSupported && hasIndividualQuery
+    ? "Fonte prevista: InfoSimples. Esta consulta pode consumir crédito."
+    : "Fonte prevista: ConsultaCRM para busca ampla. Nome ou registro direciona a consulta para a InfoSimples quando suportado.";
 
   return (
     <form className={styles.form} onSubmit={handleSubmit}>
@@ -77,9 +77,9 @@ export default function SearchForm({ onSearch, loading }) {
             className={styles.input}
             type="text"
             value=""
-            placeholder="Não suportado pela ConsultaCRM"
+            placeholder="Ainda não suportado pelas fontes atuais"
             disabled
-            title="A fonte ConsultaCRM não oferece filtro por cidade."
+            title="As integrações atuais não oferecem busca confiável por cidade."
           />
         </div>
 
@@ -135,7 +135,7 @@ export default function SearchForm({ onSearch, loading }) {
         </div>
       </div>
 
-      {localError ? <p role="alert">{localError}</p> : null}
+      <p aria-live="polite">{sourceMessage}</p>
 
       <div className={styles.actions}>
         <button className={styles.submit} type="submit" disabled={loading}>
