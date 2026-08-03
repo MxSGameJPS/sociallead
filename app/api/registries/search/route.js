@@ -46,7 +46,7 @@ export async function POST(request) {
   } catch (error) {
     if (error?.code === "MISSING_QUERY") {
       return NextResponse.json(
-        { error: "Informe o nome, número do registro ou especialidade." },
+        { error: "Informe ao menos uma UF ou um termo de busca." },
         { status: 400 }
       );
     }
@@ -55,7 +55,7 @@ export async function POST(request) {
       return NextResponse.json(
         {
           error:
-            "A fonte ConsultaCRM não permite filtrar por cidade. Use UF e nome, registro ou especialidade."
+            "A fonte ConsultaCRM não permite filtrar por cidade. Use a UF e, opcionalmente, nome, registro ou especialidade."
         },
         { status: 400 }
       );
