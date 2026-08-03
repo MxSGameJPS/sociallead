@@ -2,9 +2,8 @@ import { notFound } from "next/navigation";
 import { getLead } from "../../../repositories/leadRepository.js";
 import { getLeadWorkspace } from "../../../services/workspaces/leadWorkspaceStore.js";
 import { getProfessionalProfile } from "../../../services/profile/profileStore.js";
-import { resolveCommercialTrack } from "../../../services/leads/commercialTrack.js";
-import CommercialTrackSelector from "../../../components/CommercialTrackSelector/CommercialTrackSelector.jsx";
-import LeadWorkspace from "../../../components/LeadWorkspace/LeadWorkspace.jsx";
+import { listConsultingAssets } from "../../../services/consulting/assetStore.js";
+import UnifiedLeadWorkspace from "../../../components/UnifiedLeadWorkspace/UnifiedLeadWorkspace.jsx";
 
 export const dynamic = "force-dynamic";
 
@@ -13,14 +12,11 @@ export default async function LeadDetailPage({ params }) {
   const lead = await getLead(id);
   if (!lead) notFound();
 
-  const [workspace, profile] = await Promise.all([
+  const [workspace, profile, assets] = await Promise.all([
     getLeadWorkspace(lead.id),
     getProfessionalProfile(),
+    listConsultingAssets(lead.id),
   ]);
-  const commercialTrack = resolveCommercialTrack(lead, workspace);
 
-  return <>
-    <CommercialTrackSelector leadId={lead.id} grade={lead.grade} initialTrack={commercialTrack} />
-    <LeadWorkspace initialLead={lead} initialWorkspace={{ ...workspace, commercialTrack }} initialProfile={profile} />
-  </>;
+  return <UnifiedLeadWorkspace lead={lead} workspace={workspace} profile={profile} assets={assets} />;
 }
