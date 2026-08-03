@@ -8,7 +8,8 @@ function csvValue(value) {
 }
 
 function whatsappFor(lead) {
-  return String(lead.whatsapp || lead.phone || "").replace(/\D/g, "");
+  const digits = String(lead.whatsapp || lead.phone || "").replace(/\D/g, "");
+  return digits ? `="${digits}"` : "";
 }
 
 export default function CRMExportBoard({ initialLeads = [] }) {
