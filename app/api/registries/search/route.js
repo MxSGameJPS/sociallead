@@ -21,10 +21,22 @@ export async function POST(request) {
 
   try {
     const provider = getRegistryProvider(filters.council);
+
+    if (provider.unsupported) {
+      return NextResponse.json({
+        error: "Este conselho ainda não possui uma fonte oficial integrada.",
+        pendingIntegration: true,
+        results: [],
+        total: 0,
+        returned: 0,
+        filters
+      });
+    }
+
     const response = await provider.search(filters);
     const results = Array.isArray(response) ? response : response.results || [];
     const meta = Array.isArray(response) ? null : response.meta || null;
-    const sourceUsed = response?.source || (filters.council === "CRM" ? "cfm-public" : "pending");
+    const sourceUsed = response?.source || "cfm-public";
 
     let saved = { added: 0, updated: 0, total: 0 };
     try {
@@ -36,10 +48,7 @@ export async function POST(request) {
     return NextResponse.json({
       results,
       sourceUsed,
-      service:
-        filters.council === "CRM"
-          ? "portal.cfm.org.br/api_rest.php/api/v2/medicos/buscar_medicos"
-          : null,
+      service: "portal.cfm.org.br/api_rest.php/api/v2/medicos/buscar_medicos",
       meta,
       total: meta?.total ?? results.length,
       returned: results.length,
@@ -66,16 +75,6 @@ export async function POST(request) {
           details: error.details || null
         },
         { status: 502 }
-      );
-    }
-
-    if (error?.code === "UNSUPPORTED_COUNCIL") {
-      return NextResponse.json(
-        {
-          error: "Este conselho ainda não possui uma fonte oficial integrada.",
-          pendingIntegration: true
-        },
-        { status: 200 }
       );
     }
 
