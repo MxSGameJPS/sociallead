@@ -1,0 +1,30 @@
+{
+  "name": "FERRAZSOAREZ® Arquitetura",
+  "profession": "Arquiteto",
+  "email": "arquijuferraz@gmail.com",
+  "whatsapp": "5515981258585",
+  "phone": "5515991076460",
+  "city": "Sorocaba",
+  "state": "SP",
+  "council": "",
+  "registration": "",
+  "confidence": 70,
+  "evidence": [
+    "Sediado em Sorocaba-SP",
+    "WhatsApp: +55 15 98125-8585",
+    "E-mail: arquijuferraz@gmail.com",
+    "Anderson Soarez e Juliane Ferraz Arquitetos",
+    "FERRAZSOAREZ ARQUITETURA ®"
+  ],
+  "sources": [
+    "https://ferrazsoarezarquitetura.framer.website/"
+  ],
+  "inaccessibleSources": [],
+  "ai": {
+    "used": true,
+    "providerName": "OmniRoute",
+    "model": "meu-combo",
+    "warning": ""
+  },
+  "updatedAt": "2026-08-03T04:53:42.275Z"
+}

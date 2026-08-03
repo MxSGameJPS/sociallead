@@ -1,0 +1,30 @@
+{
+  "name": "Cláudia Ferreira",
+  "profession": "Arquiteto",
+  "email": "contato@claudiafarquiteta.com.br",
+  "whatsapp": "5515996648180",
+  "phone": "5515996648180",
+  "city": "Sorocaba",
+  "state": "SP",
+  "council": "",
+  "registration": "",
+  "confidence": 70,
+  "evidence": [
+    "A Cláudia Ferreira",
+    "Rua Noruega, 429 | Sorocaba - SP",
+    "contato@claudiafarquiteta.com.br",
+    "15 99664.8180",
+    "Projetos ARQUITETÔNICOS de alto padrão"
+  ],
+  "sources": [
+    "https://www.claudiafarquiteta.com.br/"
+  ],
+  "inaccessibleSources": [],
+  "ai": {
+    "used": true,
+    "providerName": "OmniRoute",
+    "model": "meu-combo",
+    "warning": ""
+  },
+  "updatedAt": "2026-08-03T04:58:53.608Z"
+}

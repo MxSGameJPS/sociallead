@@ -1,0 +1,31 @@
+{
+  "name": "Sartoretto Arquitetura",
+  "profession": "Arquiteto",
+  "email": "lucassartoretto.arq@gmail.com",
+  "whatsapp": "",
+  "phone": "",
+  "city": "Sorocaba",
+  "state": "SP",
+  "council": "",
+  "registration": "",
+  "confidence": 70,
+  "evidence": [
+    "Sartoretto Arquitetura",
+    "E-mail: lucassartoretto.arq@gmail.com",
+    "Instagram: @lucas_sartoretto",
+    "Centro, Sorocaba - SP, 18035-090",
+    "obra de minha autoria... arquitetura"
+  ],
+  "sources": [
+    "https://sites.google.com/view/sartoretto-arquitetura",
+    "https://sites.google.com/view/sartoretto-arquitetura/contato"
+  ],
+  "inaccessibleSources": [],
+  "ai": {
+    "used": true,
+    "providerName": "OmniRoute",
+    "model": "meu-combo",
+    "warning": ""
+  },
+  "updatedAt": "2026-08-03T04:59:40.183Z"
+}
