@@ -14,25 +14,38 @@ const INITIAL = {
   limit: 20
 };
 
-const INFOSIMPLES_COUNCILS = new Set(["CRM", "CRO", "CRP", "CRMV", "CRC", "CRF"]);
+const INFOSIMPLES_COUNCILS = new Set(["CRO", "CRP", "CRMV", "CRC", "CRF"]);
 
 export default function SearchForm({ onSearch, loading }) {
   const [form, setForm] = useState(INITIAL);
 
   function update(field, value) {
-    setForm((prev) => ({ ...prev, [field]: value }));
+    setForm((prev) => {
+      const next = { ...prev, [field]: value };
+      if (field === "council" && value !== "CRM") next.city = "";
+      return next;
+    });
   }
 
   function handleSubmit(e) {
     e.preventDefault();
-    onSearch({ ...form, city: "" });
+    onSearch(form);
   }
 
+  const isCrm = form.council === "CRM";
   const hasIndividualQuery = Boolean(form.name.trim() || form.registration.trim());
   const infosimplesSupported = INFOSIMPLES_COUNCILS.has(form.council);
-  const sourceMessage = infosimplesSupported && hasIndividualQuery
-    ? "Fonte prevista: InfoSimples. Esta consulta pode consumir crédito."
-    : "Fonte prevista: ConsultaCRM para busca ampla. Nome ou registro direciona a consulta para a InfoSimples quando suportado.";
+
+  let sourceMessage =
+    "Fonte prevista: ConsultaCRM como fonte auxiliar para este conselho.";
+
+  if (isCrm) {
+    sourceMessage =
+      "Fonte: busca pública oficial do CFM. Não consome a cota da ConsultaCRM nem crédito da InfoSimples.";
+  } else if (infosimplesSupported && hasIndividualQuery) {
+    sourceMessage =
+      "Fonte prevista: InfoSimples. Esta consulta pode consumir crédito.";
+  }
 
   return (
     <form className={styles.form} onSubmit={handleSubmit}>
@@ -76,10 +89,16 @@ export default function SearchForm({ onSearch, loading }) {
           <input
             className={styles.input}
             type="text"
-            value=""
-            placeholder="Ainda não suportado pelas fontes atuais"
-            disabled
-            title="As integrações atuais não oferecem busca confiável por cidade."
+            value={form.city}
+            maxLength={120}
+            placeholder={isCrm ? "Ex.: Sorocaba" : "Não suportado nesta fonte"}
+            disabled={!isCrm}
+            title={
+              isCrm
+                ? "Filtro enviado à busca pública do CFM."
+                : "A fonte atual deste conselho não oferece busca confiável por cidade."
+            }
+            onChange={(e) => update("city", e.target.value)}
           />
         </div>
 
