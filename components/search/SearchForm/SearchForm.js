@@ -14,8 +14,6 @@ const INITIAL = {
   limit: 20
 };
 
-const INFOSIMPLES_COUNCILS = new Set(["CRO", "CRP", "CRMV", "CRC", "CRF"]);
-
 export default function SearchForm({ onSearch, loading }) {
   const [form, setForm] = useState(INITIAL);
 
@@ -33,19 +31,9 @@ export default function SearchForm({ onSearch, loading }) {
   }
 
   const isCrm = form.council === "CRM";
-  const hasIndividualQuery = Boolean(form.name.trim() || form.registration.trim());
-  const infosimplesSupported = INFOSIMPLES_COUNCILS.has(form.council);
-
-  let sourceMessage =
-    "Fonte prevista: ConsultaCRM como fonte auxiliar para este conselho.";
-
-  if (isCrm) {
-    sourceMessage =
-      "Fonte: busca pública oficial do CFM. Não consome a cota da ConsultaCRM nem crédito da InfoSimples.";
-  } else if (infosimplesSupported && hasIndividualQuery) {
-    sourceMessage =
-      "Fonte prevista: InfoSimples. Esta consulta pode consumir crédito.";
-  }
+  const sourceMessage = isCrm
+    ? "Fonte em análise: portal público oficial do CFM. A automação depende da verificação exigida pelo próprio portal."
+    : "Este conselho aguarda a integração de uma fonte pública oficial adequada para descoberta de profissionais.";
 
   return (
     <form className={styles.form} onSubmit={handleSubmit}>
@@ -61,9 +49,7 @@ export default function SearchForm({ onSearch, loading }) {
             required
           >
             {COUNCILS.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
+              <option key={c} value={c}>{c}</option>
             ))}
           </select>
         </div>
@@ -77,9 +63,7 @@ export default function SearchForm({ onSearch, loading }) {
           >
             <option value="">Todos</option>
             {UFS.map((uf) => (
-              <option key={uf} value={uf}>
-                {uf}
-              </option>
+              <option key={uf} value={uf}>{uf}</option>
             ))}
           </select>
         </div>
@@ -91,13 +75,8 @@ export default function SearchForm({ onSearch, loading }) {
             type="text"
             value={form.city}
             maxLength={120}
-            placeholder={isCrm ? "Ex.: Sorocaba" : "Não suportado nesta fonte"}
+            placeholder={isCrm ? "Ex.: Sorocaba" : "Aguardando fonte oficial"}
             disabled={!isCrm}
-            title={
-              isCrm
-                ? "Filtro enviado à busca pública do CFM."
-                : "A fonte atual deste conselho não oferece busca confiável por cidade."
-            }
             onChange={(e) => update("city", e.target.value)}
           />
         </div>
@@ -146,9 +125,7 @@ export default function SearchForm({ onSearch, loading }) {
             onChange={(e) => update("limit", Number(e.target.value))}
           >
             {MAX_RESULTS_OPTIONS.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
+              <option key={n} value={n}>{n}</option>
             ))}
           </select>
         </div>
@@ -157,7 +134,7 @@ export default function SearchForm({ onSearch, loading }) {
       <p aria-live="polite">{sourceMessage}</p>
 
       <div className={styles.actions}>
-        <button className={styles.submit} type="submit" disabled={loading}>
+        <button className={styles.submit} type="submit" disabled={loading || !isCrm}>
           {loading ? "Buscando registros..." : "Buscar profissionais"}
         </button>
       </div>
