@@ -1,46 +1,50 @@
 function firstName(lead) {
-  return String(lead?.name || "").split(/\s|–|-/)[0];
+  return String(lead?.name || "").trim().split(/\s|–|-/)[0];
+}
+
+function lawyerName(profile = {}) {
+  return profile.professionalName || profile.name || "";
+}
+
+function lawyerIdentification(profile = {}) {
+  const oab = [profile.oabState, profile.oabNumber].filter(Boolean).join(" ");
+  return [lawyerName(profile), profile.profession || "Advogado", oab ? `OAB ${oab}` : ""].filter(Boolean).join(" · ");
+}
+
+function thesisContext(profile = {}) {
+  if (profile.thesisSummary) return profile.thesisSummary;
+  if (profile.thesisName) return `uma tese jurídica denominada ${profile.thesisName}`;
+  return "uma possibilidade jurídica relacionada a valores pagos por profissionais vinculados a órgãos de registro profissional";
+}
+
+function professionalContext(lead = {}) {
+  const profession = lead.profession || lead.segment || "profissional regulamentado";
+  const council = lead.council ? ` vinculado(a) ao ${lead.council}` : "";
+  return `${profession}${council}`;
+}
+
+function disclaimer(profile = {}) {
+  return profile.requiredDisclaimer || "A existência de eventual direito depende de análise individual dos fatos e documentos.";
 }
 
 function signature(profile = {}) {
-  return [profile.name, profile.profession].filter(Boolean).join(" · ");
+  const sign = lawyerIdentification(profile);
+  const contacts = [profile.email, profile.whatsapp].filter(Boolean).join(" · ");
+  return [sign, profile.brandName, contacts].filter(Boolean).join("\n");
 }
 
-function introduction(profile = {}) {
-  const name = profile.name ? `Meu nome é ${profile.name}` : "Trabalho com criação de sites";
-  const profession = profile.profession ? ` e sou ${profile.profession}` : "";
-  const brand = profile.brandName ? ` na ${profile.brandName}` : "";
-  return `${name}${profession}${brand}.`;
-}
-
-function observedContext(lead) {
-  if (lead.googleRating) {
-    return `Encontrei o perfil de vocês no Google e vi a avaliação ${lead.googleRating}/5${lead.googleReviews ? ` com ${lead.googleReviews} avaliações` : ""}. Isso mostra uma reputação muito positiva.`;
-  }
-  if (lead.instagram) return "Encontrei o negócio e também vi que vocês possuem presença no Instagram.";
-  return "Conheci o negócio pelo perfil do Google e achei interessante o trabalho de vocês.";
-}
-
-function previewOffer(lead) {
-  const niche = lead.segment ? ` para ${String(lead.segment).toLowerCase()}` : "";
-  return `uma prévia de site profissional pensada${niche}`;
-}
-
-export function buildProfileMessages(lead, profile = {}, previewUrl = "") {
-  const business = lead.name || "seu negócio";
+export function buildProfileMessages(lead, profile = {}) {
   const first = firstName(lead);
+  const context = professionalContext(lead);
+  const thesis = thesisContext(profile);
   const sign = signature(profile);
   const ending = sign ? `\n\n${sign}` : "";
 
-  const initial = `Oi! Falo com a pessoa responsável pela ${business}? 👋\n\n${introduction(profile)} ${observedContext(lead)} Preparei a ideia de ${previewOffer(lead)} para mostrar como a presença digital da ${business} poderia ficar. Posso te enviar a prévia sem compromisso?${ending}`;
+  const initial = `Olá${first ? `, ${first}` : ""}. Meu nome é ${lawyerName(profile) || "advogado responsável"}. Estou entrando em contato porque identifiquei seu perfil público como ${context}. Trabalho com ${thesis} e gostaria de verificar se a situação pode ter relação com o seu caso. ${disclaimer(profile)} Posso lhe explicar de forma breve como funciona essa análise?${ending}`;
 
-  const followup = previewUrl
-    ? `Oi${first ? `, ${first}` : ""}! Passando para compartilhar a prévia que preparei para a ${business}:\n${previewUrl}\n\nEla é uma proposta visual inicial, sem compromisso. Quando puder olhar, me diga o que achou.${ending}`
-    : `Oi${first ? `, ${first}` : ""}! Passando novamente por aqui. Posso preparar e te enviar uma prévia visual para a ${business}, sem compromisso, para você avaliar com calma?${ending}`;
+  const followup = `Olá${first ? `, ${first}` : ""}. Retomo meu contato apenas para confirmar se recebeu a mensagem sobre ${profile.thesisName || "a análise jurídica destinada a profissionais registrados em órgãos de classe"}. Não se trata de afirmação de direito garantido, mas de uma possibilidade que depende de avaliação individual. Posso lhe encaminhar um resumo objetivo?${ending}`;
 
-  const recovery = previewUrl
-    ? `Oi${first ? `, ${first}` : ""}! Retomei nossa conversa porque a prévia da ${business} continua disponível aqui:\n${previewUrl}\n\nPosso ajustar a ideia com base no que vocês realmente precisam. O que você mudaria primeiro?${ending}`
-    : `Oi${first ? `, ${first}` : ""}! Posso preparar uma versão visual mais enxuta, focada apenas no essencial para a ${business}. Posso te mostrar essa ideia sem compromisso?${ending}`;
+  const recovery = `Olá${first ? `, ${first}` : ""}. Respeito sua decisão e não quero ser insistente. Deixo apenas registrado que permaneço disponível caso queira compreender melhor ${profile.thesisName || "a possibilidade jurídica mencionada"} e verificar, sem compromisso, se existe algum enquadramento aplicável à sua situação. ${disclaimer(profile)}${ending}`;
 
   return { initial, followup, recovery };
 }
