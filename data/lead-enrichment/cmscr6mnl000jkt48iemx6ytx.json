@@ -11,10 +11,10 @@
   "confidence": 70,
   "evidence": [
     "A Cláudia Ferreira",
+    "Projetos ARQUITETÔNICOS de alto padrão",
     "Rua Noruega, 429 | Sorocaba - SP",
     "contato@claudiafarquiteta.com.br",
-    "15 99664.8180",
-    "Projetos ARQUITETÔNICOS de alto padrão"
+    "15 99664.8180"
   ],
   "sources": [
     "https://www.claudiafarquiteta.com.br/"
@@ -26,5 +26,6 @@
     "model": "meu-combo",
     "warning": ""
   },
-  "updatedAt": "2026-08-03T04:58:53.608Z"
+  "updatedAt": "2026-08-03T08:11:50.452Z",
+  "validationTag": "FALTA REGISTRO"
 }

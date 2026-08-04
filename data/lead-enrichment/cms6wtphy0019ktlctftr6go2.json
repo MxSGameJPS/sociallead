@@ -1,19 +1,21 @@
 {
-  "name": "Dra. Nathâna Garcia",
+  "name": "Nathâna Garcia",
   "profession": "Dentista",
-  "email": "",
+  "email": "nathanagarcia1903@gmail.com",
   "whatsapp": "5551995154636",
-  "phone": "5551995154636",
+  "phone": "551000855432",
   "city": "Dois Irmãos",
   "state": "RS",
-  "council": "",
+  "council": "CRO",
   "registration": "",
   "confidence": 70,
   "evidence": [
     "Dra. Nathâna Garcia Dentista em Dois Irmãos",
     "DENTISTA EM DOIS IRMÃOS",
-    "R. Berlim, 44 - Sl 04 - Centro, Dois Irmãos - RS, 93950-000",
-    "whatsapp 5551995154636"
+    "WhatsApp: 51 99515-4636",
+    "E-mail: nathanagarcia1903@gmail.com",
+    "Rua Berlim, 44 - Sala 4 - Centro - Dois Irmãos/RS",
+    "Cirurgiã-Dentista (Facebook)"
   ],
   "sources": [
     "https://dentistanathanagarcia.my.canva.site/"
@@ -25,6 +27,6 @@
     "model": "meu-combo",
     "warning": ""
   },
-  "updatedAt": "2026-08-03T08:03:52.984Z",
-  "validationTag": "NÃO VALIDADO"
+  "updatedAt": "2026-08-03T14:24:59.892Z",
+  "validationTag": "FALTA REGISTRO"
 }

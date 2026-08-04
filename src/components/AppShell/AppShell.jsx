@@ -50,7 +50,7 @@ export default function AppShell({ children }) {
         <div className={s.brand}>
           <div className={s.logoMark}>L</div>
           <div className={s.brandText}>
-            <strong>LeadFlow</strong>
+            <strong>SocialLeads</strong>
             <span>Prospecção local</span>
           </div>
           <button className={s.collapse} onClick={toggleSidebar} aria-label={collapsed ? "Expandir menu" : "Recolher menu"}>{collapsed ? "›" : "‹"}</button>

@@ -1,0 +1,28 @@
+{
+  "name": "Jéssica Mendes Arquitetura",
+  "profession": "Arquiteta",
+  "email": "jessicamendes.arq@gmail.com",
+  "whatsapp": "5515991355308",
+  "phone": "5515991355308",
+  "city": "Sorocaba",
+  "state": "SP",
+  "council": "CAU",
+  "registration": "A142926-4",
+  "confidence": 70,
+  "evidence": [
+    "E-mail: jessicamendes.arq@gmail.com",
+    "CAU A142926-4",
+    "(15) 99135-5308",
+    "Sorocaba - SP, 18035-010"
+  ],
+  "sources": [],
+  "inaccessibleSources": [],
+  "ai": {
+    "used": true,
+    "providerName": "OmniRoute",
+    "model": "meu-combo",
+    "warning": ""
+  },
+  "updatedAt": "2026-08-03T15:24:08.361Z",
+  "validationTag": "VALIDADO"
+}

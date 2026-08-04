@@ -1,17 +1,19 @@
 {
   "name": "Tatiana Demarco",
   "profession": "Dentista",
-  "email": "",
-  "whatsapp": "",
-  "phone": "555135643000",
+  "email": "//pps.wh@sapp.net",
+  "whatsapp": "5551997077077",
+  "phone": "552085916301",
   "city": "Dois Irmãos",
   "state": "RS",
-  "council": "",
-  "registration": "",
-  "confidence": 30,
+  "council": "CRO",
+  "registration": "17462",
+  "confidence": 70,
   "evidence": [
-    "Download Tatiana Demarco Open app",
-    "profession informada: Dentista",
+    "Conta comercial T@iana Demarco",
+    "phone=555135643000",
+    "WhatsApp: ... O número exibido é (51) 99707-7077",
+    "CRO: o registro profissional informado é CRO-RS 17462",
     "Dois Irmãos - RS, 93950-000"
   ],
   "sources": [
@@ -24,6 +26,6 @@
     "model": "meu-combo",
     "warning": ""
   },
-  "updatedAt": "2026-08-03T08:09:24.071Z",
-  "validationTag": "NÃO VALIDADO"
+  "updatedAt": "2026-08-03T14:19:10.836Z",
+  "validationTag": "VALIDADO"
 }

@@ -1,0 +1,32 @@
+{
+  "name": "Sabrina Vianna",
+  "profession": "Arquiteto",
+  "email": "arq.saudeinteriores@gmail.com",
+  "whatsapp": "5515997869697",
+  "phone": "5515997869697",
+  "city": "Sorocaba",
+  "state": "SP",
+  "council": "",
+  "registration": "",
+  "confidence": 70,
+  "evidence": [
+    "Sobre Sabrina Vianna",
+    "Arquiteta formada pela Universidade Federal da Bahia (UFBA)",
+    "(15) 99786-9697",
+    "https://wa.me/5515997869697",
+    "Contato +55 15 99786-9697 arq.saudeinteriores@gmail.com",
+    "Sorocaba - SP, 18065-425"
+  ],
+  "sources": [
+    "https://site-escrit-rio-sabr-bim8.bolt.host/"
+  ],
+  "inaccessibleSources": [],
+  "ai": {
+    "used": true,
+    "providerName": "OmniRoute",
+    "model": "meu-combo",
+    "warning": ""
+  },
+  "updatedAt": "2026-08-03T15:36:59.374Z",
+  "validationTag": "FALTA REGISTRO"
+}

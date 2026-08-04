@@ -6,16 +6,16 @@
   "phone": "5551984125942",
   "city": "Dois Irmãos",
   "state": "RS",
-  "council": "",
-  "registration": "",
+  "council": "CRO-RS",
+  "registration": "17462",
   "confidence": 70,
   "evidence": [
     "Daniela Ferronato Breunig",
     "Dentista e consultório odontológico",
-    "Odontologia Estética Especialista em Prótese e Dentística",
+    "Especialista em Prótese e Dentística",
     "Rua Berlim 231 sala 4, Dois Irmãos",
-    "phone: (51) 98412-5942",
-    "state: RS"
+    "CRO-RS 17462",
+    "whatsapp 5551984125942"
   ],
   "sources": [],
   "inaccessibleSources": [
@@ -30,6 +30,6 @@
     "model": "meu-combo",
     "warning": ""
   },
-  "updatedAt": "2026-08-03T08:07:46.202Z",
-  "validationTag": "NÃO VALIDADO"
+  "updatedAt": "2026-08-03T14:23:04.638Z",
+  "validationTag": "FALTA EMAIL"
 }

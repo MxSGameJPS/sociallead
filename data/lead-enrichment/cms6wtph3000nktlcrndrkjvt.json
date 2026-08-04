@@ -1,0 +1,31 @@
+{
+  "name": "Bruna F. Mallmann",
+  "profession": "Dentista",
+  "email": "bfmodontologia@gmail.com",
+  "whatsapp": "5551997077077",
+  "phone": "551000543703",
+  "city": "Dois Irmãos",
+  "state": "RS",
+  "council": "",
+  "registration": "",
+  "confidence": 70,
+  "evidence": [
+    "Dra. Bruna F. Mallmann - Cirurgiã Dentista",
+    "Página · Dentista geral",
+    "Av. São Miguel, nº 1000, Centro, Dois Irmãos, RS, Brazil",
+    "bfmodontologia@gmail.com",
+    "WhatsApp: (51) 99707-7077"
+  ],
+  "sources": [
+    "https://www.facebook.com/bfmodontologia"
+  ],
+  "inaccessibleSources": [],
+  "ai": {
+    "used": true,
+    "providerName": "OmniRoute",
+    "model": "meu-combo",
+    "warning": ""
+  },
+  "updatedAt": "2026-08-03T14:28:18.345Z",
+  "validationTag": "FALTA REGISTRO"
+}
