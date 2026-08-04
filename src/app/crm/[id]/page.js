@@ -20,6 +20,19 @@ export default async function LeadDetailPage({ params }) {
     listConsultingAssets(lead.id),
   ]);
 
+  const hydratedLead = {
+    ...lead,
+    name: enrichment.name || lead.name,
+    profession: enrichment.profession || lead.segment || "",
+    council: enrichment.council || "",
+    registration: enrichment.registration || "",
+    email: enrichment.email || lead.email || "",
+    whatsapp: enrichment.whatsapp || lead.whatsapp || "",
+    city: enrichment.city || lead.city || "",
+    state: enrichment.state || lead.location || "",
+    validationTag: enrichment.validationTag || "AGUARDANDO ANÁLISE",
+  };
+
   const hydratedWorkspace = {
     ...workspace,
     consulting: {
@@ -30,5 +43,5 @@ export default async function LeadDetailPage({ params }) {
     },
   };
 
-  return <UnifiedLeadWorkspace lead={lead} workspace={hydratedWorkspace} profile={profile} assets={assets} />;
+  return <UnifiedLeadWorkspace lead={hydratedLead} workspace={hydratedWorkspace} profile={profile} assets={assets} />;
 }
