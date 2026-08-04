@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { listIbgeCities } from "../../services/locations/ibge.js";
 import { searchGooglePlaces } from "../../services/places/googlePlaces.js";
+import { inferProfessionalCouncil } from "../../services/professions/professionalCouncils.js";
 
 function refreshLeadViews() {
   revalidatePath("/dashboard");
@@ -19,11 +20,9 @@ export async function searchPlacesAction(filters) {
 }
 
 export async function addPlacesToCrmAction(items) {
-  if (!Array.isArray(items) || !items.length) throw new Error("Selecione ao menos um estabelecimento.");
-  if (items.length > 60) throw new Error("O limite por envio é de 60 estabelecimentos.");
+  if (!Array.isArray(items) || !items.length) throw new Error("Selecione ao menos um profissional.");
+  if (items.length > 60) throw new Error("O limite por envio é de 60 profissionais.");
 
-  // Carrega Prisma/Supabase somente quando o usuário realmente envia leads ao CRM.
-  // Assim, a action leve de cidades não recompila todo o grafo de persistência no HMR.
   const { importLeads } = await import("../../repositories/leadRepository.js");
 
   const leads = items.map(item => ({
@@ -31,6 +30,8 @@ export async function addPlacesToCrmAction(items) {
     source: "Google Places",
     name: item.name,
     segment: item.segment,
+    profession: item.profession || item.segment,
+    council: item.council || inferProfessionalCouncil(item.profession || item.segment),
     city: item.city,
     location: item.location,
     address: item.address,
