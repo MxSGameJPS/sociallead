@@ -1,5 +1,5 @@
 import { listLeads, stats as getStats } from "../../repositories/leadRepository.js";
-import { BRL } from "../../services/leads/format.js";
+import { listLeadEnrichments } from "../../services/leads/leadEnrichmentStore.js";
 import { isPossibleWhatsApp } from "../../services/places/googlePlaces.js";
 import styles from "./dashboard.module.css";
 
@@ -11,51 +11,66 @@ function hasWhatsappAvailable(lead) {
   return Boolean(lead.whatsapp || isPossibleWhatsApp(lead.phone, "BR"));
 }
 
+function verificationTag(lead, enrichments) {
+  const enrichment = enrichments[lead.id] || {};
+  return String(enrichment.validationTag || "AGUARDANDO ANÁLISE").toUpperCase();
+}
+
 export default async function DashboardPage() {
-  let s = null, leads = [], err = null;
+  let s = null;
+  let leads = [];
+  let enrichments = {};
+  let err = null;
+
   try {
-    [s, leads] = await Promise.all([getStats(), listLeads()]);
-  } catch (e) {
-    err = e.message;
+    [s, leads, enrichments] = await Promise.all([
+      getStats(),
+      listLeads(),
+      listLeadEnrichments(),
+    ]);
+  } catch (error) {
+    err = error.message;
   }
 
-  if (err) return <main className={styles.page}><div className={styles.err}>Erro ao ler o banco: {err}</div></main>;
+  if (err) return <main className={styles.page}><div className={styles.err}>Não foi possível carregar os dados locais: {err}</div></main>;
 
   const total = s.total;
   const whatsappAvailable = leads.filter(hasWhatsappAvailable).length;
-  const newLeads = s.byStage.novo || 0;
-  const approached = Math.max(0, total - newLeads);
-  const scheduled = 0;
-  const followups = s.followupTotal;
-  const lost = s.lost;
-  const converted = s.won;
+  const verified = leads.filter(lead => verificationTag(lead, enrichments) === "VALIDADO").length;
+  const pending = leads.filter(lead => verificationTag(lead, enrichments) === "AGUARDANDO ANÁLISE").length;
+  const missingEmail = leads.filter(lead => verificationTag(lead, enrichments) === "FALTA EMAIL").length;
+  const missingRegistration = leads.filter(lead => verificationTag(lead, enrichments) === "FALTA REGISTRO").length;
+  const unverified = leads.filter(lead => verificationTag(lead, enrichments) === "NÃO VALIDADO").length;
+  const contacted = Math.max(0, total - (s.byStage.novo || 0));
+  const responded = (s.byStage.com_resposta || 0) + (s.byStage.proposta || 0) + (s.byStage.negociacao || 0) + (s.byStage.ganho || 0);
+  const contracted = s.byStage.ganho || 0;
 
   const funnel = [
-    { key: "total", label: "Total", value: total, rate: "Base completa", tone: styles.gray },
-    { key: "approached", label: "Abordados", value: approached, rate: `${pct(approached, total)}% do total`, tone: styles.blue },
-    { key: "scheduled", label: "Agendados", value: scheduled, rate: `${pct(scheduled, approached)}% dos abordados`, tone: styles.green },
-    { key: "followup", label: "Follow Up", value: followups, rate: `${pct(followups, approached)}% dos abordados`, tone: styles.orange },
-    { key: "lost", label: "Perdidos", value: lost, rate: `${pct(lost, approached)}% dos abordados`, tone: styles.red },
-    { key: "converted", label: "Convertidos", value: converted, rate: `${pct(converted, Math.max(1, scheduled || approached))}% da operação`, tone: styles.purple },
+    { key: "located", label: "Localizados", value: total, rate: "Base de profissionais", tone: styles.gray },
+    { key: "verified", label: "Verificados", value: verified, rate: `${pct(verified, total)}% da base`, tone: styles.blue },
+    { key: "contacted", label: "Contatados", value: contacted, rate: `${pct(contacted, total)}% da base`, tone: styles.green },
+    { key: "responded", label: "Responderam", value: responded, rate: `${pct(responded, contacted)}% dos contatos`, tone: styles.orange },
+    { key: "contracted", label: "Contratados", value: contracted, rate: `${pct(contracted, Math.max(1, responded))}% das respostas`, tone: styles.purple },
   ];
 
   const recommendations = [];
-  if (total === 0) recommendations.push({ level: "info", title: "Importe sua primeira base", text: "Abra Leads e envie um CSV ou JSON para começar a operação." });
-  if (total > 0 && whatsappAvailable === 0) recommendations.push({ level: "danger", title: "Nenhum WhatsApp disponível", text: `Os ${total} leads atuais não possuem WhatsApp confirmado nem celular compatível para teste.` });
-  else if (s.withoutContact > 0) recommendations.push({ level: "warn", title: "Base com contatos incompletos", text: `${s.withoutContact} leads não possuem WhatsApp, telefone, e-mail ou Instagram.` });
-  if (s.followupDue > 0) recommendations.push({ level: "warn", title: "Follow-ups vencidos", text: `${s.followupDue} leads precisam ser retomados hoje.` });
-  if (s.active > 0 && converted === 0) recommendations.push({ level: "info", title: "Pipeline em andamento", text: `${s.active} leads estão sendo trabalhados. Registre propostas e próximos passos no CRM.` });
-  if (!recommendations.length) recommendations.push({ level: "ok", title: "Operação saudável", text: "Sem ações urgentes no momento." });
+  if (total === 0) recommendations.push({ level: "info", title: "Localize os primeiros profissionais", text: "Use a busca por profissão e cidade para formar a base inicial da tese jurídica." });
+  if (pending > 0) recommendations.push({ level: "info", title: "Verificações pendentes", text: `${pending} profissionais ainda aguardam análise de e-mail e registro profissional.` });
+  if (missingEmail > 0) recommendations.push({ level: "warn", title: "E-mails não localizados", text: `${missingEmail} profissionais possuem registro, mas ainda exigem busca complementar de e-mail.` });
+  if (missingRegistration > 0) recommendations.push({ level: "warn", title: "Registros não localizados", text: `${missingRegistration} profissionais possuem e-mail, mas o registro profissional ainda não foi encontrado.` });
+  if (unverified > 0) recommendations.push({ level: "danger", title: "Dados insuficientes", text: `${unverified} profissionais não tiveram e-mail nem registro localizados.` });
+  if (s.followupDue > 0) recommendations.push({ level: "warn", title: "Retornos pendentes", text: `${s.followupDue} contatos possuem acompanhamento vencido para hoje.` });
+  if (!recommendations.length) recommendations.push({ level: "ok", title: "Operação organizada", text: "Não há pendências críticas de verificação ou acompanhamento neste momento." });
 
   return (
     <main className={styles.page}>
       <header className={styles.header}>
-        <div><h1>Dashboard</h1><p>Visão geral da sua operação</p></div>
-        <div className={styles.headerActions}><a href="/leads">Importar leads</a><a className={styles.primary} href="/crm">Abrir CRM</a></div>
+        <div><h1>Visão geral</h1><p>Acompanhamento da localização, verificação e contato dos profissionais.</p></div>
+        <div className={styles.headerActions}><a href="/leads">Localizar profissionais</a><a className={styles.primary} href="/crm">Abrir acompanhamento</a></div>
       </header>
 
       <section className={styles.panel}>
-        <div className={styles.panelTitle}>Funil de conversão</div>
+        <div className={styles.panelTitle}>Fluxo da operação jurídica</div>
         <div className={styles.funnel}>
           {funnel.map((item, index) => <div key={item.key} className={styles.stepWrap}>
             <div className={`${styles.step} ${item.tone}`} style={{ "--step": index }}><strong>{item.value}</strong></div>
@@ -65,35 +80,34 @@ export default async function DashboardPage() {
 
         <div className={styles.legendAndTotal}>
           <div className={styles.legend}>
-            <p><b className={styles.purpleText}>Taxa de conversão</b> (Convertidos / Total) — principal indicador de fechamento.</p>
-            <p><b className={styles.blueText}>Taxa de abordagem</b> (Abordados / Total) — mostra quanto da base já está sendo trabalhada.</p>
-            <p><b className={styles.greenText}>Taxa de agendamento</b> — será ativada junto ao calendário de agendamentos.</p>
-            <p><b className={styles.orangeText}>Taxa de follow-up</b> — muitos leads aqui podem indicar pipeline parado.</p>
-            <p><b className={styles.redText}>Taxa de perdidos</b> — ajuda a revisar script, oferta e qualidade da base.</p>
+            <p><b className={styles.blueText}>Verificação</b> — profissionais com e-mail e registro localizados.</p>
+            <p><b className={styles.greenText}>Contato</b> — profissionais que já receberam a primeira abordagem.</p>
+            <p><b className={styles.orangeText}>Resposta</b> — profissionais que responderam e podem avançar para análise.</p>
+            <p><b className={styles.purpleText}>Contratação</b> — profissionais incorporados ao atendimento jurídico.</p>
           </div>
-          <div className={styles.totalBox}><span>Total de leads</span><div className={styles.donut} style={{ "--fill": `${pct(whatsappAvailable, Math.max(total, 1)) * 3.6}deg` }}><strong>{total}</strong></div><small>{whatsappAvailable} com WhatsApp ou celular testável</small></div>
+          <div className={styles.totalBox}><span>Profissionais cadastrados</span><div className={styles.donut} style={{ "--fill": `${pct(verified, Math.max(total, 1)) * 3.6}deg` }}><strong>{total}</strong></div><small>{verified} com dados verificados</small></div>
         </div>
       </section>
 
       <div className={styles.bottomGrid}>
         <section className={styles.panel}>
-          <div className={styles.panelTitle}>Funil de leads</div>
+          <div className={styles.panelTitle}>Situação da base</div>
           <div className={styles.bars}>{funnel.map(item => <div key={item.key} className={styles.barRow}><span>{item.label}</span><div><i className={item.tone} style={{ width: `${pct(item.value, Math.max(total, 1))}%` }} /></div><b>{item.value}</b></div>)}</div>
-          <a className={styles.link} href="/crm">Ver CRM →</a>
+          <a className={styles.link} href="/crm">Ver profissionais →</a>
         </section>
 
         <section className={styles.panel}>
-          <div className={styles.panelTitle}>Recomendações</div>
+          <div className={styles.panelTitle}>Pendências e próximos passos</div>
           <div className={styles.recommendations}>{recommendations.map((item, index) => <div key={index} className={`${styles.recommendation} ${styles[item.level]}`}><strong>{item.title}</strong><p>{item.text}</p></div>)}</div>
         </section>
       </div>
 
       <section className={styles.kpis}>
-        <div><span>Com WhatsApp</span><strong>{whatsappAvailable}</strong></div>
-        <div><span>Sem contato</span><strong>{s.withoutContact}</strong></div>
-        <div><span>Em aberto</span><strong>{s.active}</strong></div>
-        <div><span>Pipeline</span><strong>{BRL(s.pipeline)}</strong></div>
-        <div><span>Fechado</span><strong>{BRL(s.closed)}</strong></div>
+        <div><span>Verificados</span><strong>{verified}</strong></div>
+        <div><span>Aguardando análise</span><strong>{pending}</strong></div>
+        <div><span>Falta e-mail</span><strong>{missingEmail}</strong></div>
+        <div><span>Falta registro</span><strong>{missingRegistration}</strong></div>
+        <div><span>WhatsApp disponível</span><strong>{whatsappAvailable}</strong></div>
       </section>
     </main>
   );
