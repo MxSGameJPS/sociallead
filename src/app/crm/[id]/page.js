@@ -4,6 +4,7 @@ import { getLeadWorkspace } from "../../../services/workspaces/leadWorkspaceStor
 import { getLeadEnrichment } from "../../../services/leads/leadEnrichmentStore.js";
 import { getProfessionalProfile } from "../../../services/profile/profileStore.js";
 import { listConsultingAssets } from "../../../services/consulting/assetStore.js";
+import { resolveProfessionalCouncil } from "../../../services/professions/professionalCouncils.js";
 import UnifiedLeadWorkspace from "../../../components/UnifiedLeadWorkspace/UnifiedLeadWorkspace.jsx";
 
 export const dynamic = "force-dynamic";
@@ -20,11 +21,18 @@ export default async function LeadDetailPage({ params }) {
     listConsultingAssets(lead.id),
   ]);
 
+  const profession = enrichment.profession || lead.segment || "";
+  const council = resolveProfessionalCouncil({
+    profession,
+    segment: lead.segment,
+    council: enrichment.council,
+  });
+
   const hydratedLead = {
     ...lead,
     name: enrichment.name || lead.name,
-    profession: enrichment.profession || lead.segment || "",
-    council: enrichment.council || "",
+    profession,
+    council,
     registration: enrichment.registration || "",
     email: enrichment.email || lead.email || "",
     whatsapp: enrichment.whatsapp || lead.whatsapp || "",
@@ -38,7 +46,7 @@ export default async function LeadDetailPage({ params }) {
     consulting: {
       ...workspace.consulting,
       contactEnrichment: enrichment,
-      council: enrichment.council || "",
+      council,
       registration: enrichment.registration || "",
     },
   };
