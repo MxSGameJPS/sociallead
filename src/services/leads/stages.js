@@ -1,14 +1,24 @@
 export const STAGES = [
-  { id: "novo", label: "Novo", sub: "Ainda não abordado" },
-  { id: "contatado", label: "Contatado", sub: "Mensagem enviada" },
-  { id: "sem_resposta", label: "Sem resposta", sub: "Não respondeu — analisar" },
-  { id: "com_resposta", label: "Com resposta", sub: "Respondeu — avançar" },
-  { id: "proposta", label: "Proposta", sub: "Proposta enviada" },
-  { id: "proposta_rejeitada", label: "Proposta rejeitada", sub: "Recuperar c/ 2ª proposta" },
-  { id: "negociacao", label: "Negociação", sub: "Perto do sim" },
-  { id: "ganho", label: "Ganho", sub: "Fechado" },
-  { id: "perdido", label: "Perdido", sub: "Encerrado" },
+  { id: "novo", label: "Localizado", sub: "Profissional ainda não contatado" },
+  { id: "contatado", label: "Contato realizado", sub: "Primeira comunicação enviada" },
+  { id: "sem_resposta", label: "Aguardando resposta", sub: "Contato realizado, sem retorno" },
+  { id: "com_resposta", label: "Respondeu", sub: "Profissional demonstrou interesse" },
+  { id: "proposta", label: "Documentos solicitados", sub: "Aguardando informações para análise" },
+  { id: "proposta_rejeitada", label: "Não interessado", sub: "Profissional recusou o atendimento" },
+  { id: "negociacao", label: "Em análise jurídica", sub: "Documentação e enquadramento em análise" },
+  { id: "ganho", label: "Contratado", sub: "Contratação formalizada" },
+  { id: "perdido", label: "Não elegível", sub: "Caso encerrado após avaliação" },
 ];
-export const STAGE_IDS = STAGES.map(s => s.id);
-export const NEXT = { novo: "contatado", contatado: "com_resposta", sem_resposta: "com_resposta", com_resposta: "proposta", proposta: "negociacao", proposta_rejeitada: "negociacao", negociacao: "ganho" };
-export const LANDING = { none: "—", todo: "A fazer", done: "Pronta", sent: "Enviada" };
+
+export const STAGE_IDS = STAGES.map(stage => stage.id);
+
+export const NEXT = {
+  novo: "contatado",
+  contatado: "sem_resposta",
+  sem_resposta: "com_resposta",
+  com_resposta: "proposta",
+  proposta: "negociacao",
+  negociacao: "ganho",
+};
+
+export const LANDING = { none: "—", todo: "Pendente", done: "Concluído", sent: "Enviado" };
